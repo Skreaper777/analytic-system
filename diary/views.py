@@ -83,27 +83,50 @@ def predict_today(request):
 
     try:
         user_input = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.error("[predict_today] Invalid JSON: %s", e)
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     try:
         df = get_diary_dataframe()
     except Exception as e:
+        logger.error("[predict_today] Data error: %s", e)
         return JsonResponse({"error": f"Data error: {str(e)}"}, status=500)
 
-    today_row = {k: float(v) for k, v in user_input.items() if v != ''}
-    result = {}
+    # Формирование строки с текущими значениями
+    today_row = {}
+    for k, v in user_input.items():
+        if v != '':
+            try:
+                today_row[k] = float(v)
+            except ValueError:
+                logger.warning("[predict_today] Non-numeric value for %s: %s", k, v)
 
+    result = {}
+    # Прогноз для каждого параметра
     for target in df.columns:
         if target == 'date' or target in today_row:
             continue
         try:
             model_info = train_model(df, target, exclude=list(today_row.keys()))
             model = model_info['model']
-            X_today = pd.DataFrame([today_row], columns=model_info['coefficients']['parameter'])
+            # Определяем правильный порядок признаков
+            if hasattr(model, 'feature_names_in_'):
+                features = list(model.feature_names_in_)
+            else:
+                features = model_info['coefficients']['parameter']
+            # Формируем полную строку с заполнением отсутствующих значений средними
+            full_row = {}
+            for feat in features:
+                if feat in today_row:
+                    full_row[feat] = today_row[feat]
+                else:
+                    # используем среднее значение по столбцу
+                    full_row[feat] = df[feat].mean()
+            X_today = pd.DataFrame([full_row], columns=features)
             pred = model.predict(X_today)[0]
-            result[target] = round(pred, 2)
-        except Exception:
-            continue
+            result[target] = round(float(pred), 2)
+        except Exception as e:
+            logger.error("[predict_today] Prediction error for %s: %s", target, e, exc_info=True)
 
     return JsonResponse(result)

@@ -8,7 +8,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {{ parameter_keys|json_script:"param-keys" }}
     <style>
-        /* стили без изменений */
         body { font-family: sans-serif; background-color: #f4f4f4; padding: 40px 20px; margin: 0; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
         h2 { text-align: center; margin-bottom: 10px; }
@@ -57,10 +56,10 @@
 </div>
 
 <script>
-// Функция для получения CSRF токена из куки
+// CSRF токен из куки
 function getCookie(name) {
     let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
+    if (document.cookie) {
         document.cookie.split(';').forEach(cookie => {
             const [key, value] = cookie.trim().split('=');
             if (key === name) cookieValue = decodeURIComponent(value);
@@ -69,71 +68,61 @@ function getCookie(name) {
     return cookieValue;
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", () => {
     const formValues = {};
     const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
 
     allKeys.forEach(name => {
         const input = document.getElementById(`input-${name}`);
-        if (input && input.value !== "") {
-            formValues[name] = input.value;
-        }
+        if (input && input.value !== '') formValues[name] = input.value;
     });
 
-    function colorHint(value) {
-        if (value <= 1) return "green";
-        if (value <= 3) return "yellow";
-        return "red";
-    }
+    const colorHint = v => v <= 1 ? 'green' : v <= 3 ? 'yellow' : 'red';
 
-    function updatePredictions(data) {
-        Object.entries(data).forEach(([key, val]) => {
-            const predDiv = document.getElementById("predicted-" + key);
-            if (predDiv) {
-                const color = colorHint(val);
-                predDiv.textContent = `💡 Прогноз: ${val}`;
-                predDiv.dataset.color = color;
+    const updatePredictions = data => {
+        Object.entries(data).forEach(([k,v]) => {
+            const div = document.getElementById(`predicted-${k}`);
+            if (div) {
+                const color = colorHint(v);
+                div.textContent = `💡 Прогноз: ${v}`;
+                div.dataset.color = color;
             }
         });
-    }
+    };
 
-    function fetchPredictions() {
-        fetch("/predict/", {
-            method: "POST",
+    const fetchPredictions = () => {
+        fetch('/predict/', {
+            method: 'POST',
             headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie('csrftoken')
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
             },
             body: JSON.stringify(formValues)
         })
-        .then(resp => resp.json())
-        .then(data => updatePredictions(data))
-        .catch(err => console.warn("Prediction error:", err));
-    }
+        .then(r => r.json())
+        .then(updatePredictions)
+        .catch(err => console.warn('Prediction error:', err));
+    };
 
     document.querySelectorAll('.rating-buttons').forEach(group => {
         const name = group.dataset.name;
         const hiddenInput = document.getElementById(`input-${name}`);
         const buttons = group.querySelectorAll('button');
-        const selectedValue = hiddenInput?.value?.toString().trim();
-
+        const sel = hiddenInput?.value?.toString().trim();
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
-                const value = btn.dataset.value;
-                hiddenInput.value = value;
-                formValues[name] = value;
+                hiddenInput.value = btn.dataset.value;
+                formValues[name] = btn.dataset.value;
                 buttons.forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 fetchPredictions();
             });
-
-            if (selectedValue && parseFloat(btn.dataset.value) === parseFloat(selectedValue)) {
+            if (sel && parseFloat(btn.dataset.value) === parseFloat(sel)) {
                 btn.classList.add('selected');
             }
         });
     });
 
-    // Инициируем начальный запрос прогнозов
     fetchPredictions();
 });
 </script>
