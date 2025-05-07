@@ -77,9 +77,13 @@ document.addEventListener("DOMContentLoaded", function () {
         formValues[name] = val;
     });
 
-    function colorHint(value) {
-        if (value <= 1) return "green";
-        if (value <= 3) return "yellow";
+    function colorHint(predicted, original) {
+        const diff = Math.abs(predicted - original);
+        if (diff < 1) {
+            return "green";
+        } else if (diff >= 1 && diff <= 2) {
+            return "yellow";
+        }
         return "red";
     }
 
@@ -87,7 +91,8 @@ document.addEventListener("DOMContentLoaded", function () {
         Object.entries(data).forEach(([key, val]) => {
             const predDiv = document.getElementById("predicted-" + key);
             if (predDiv) {
-                const color = colorHint(val);
+                const original = parseFloat(formValues[key]);
+                const color = colorHint(val, original);
                 predDiv.textContent = `💡 Прогноз: ${val}`;
                 predDiv.dataset.color = color;
             }
