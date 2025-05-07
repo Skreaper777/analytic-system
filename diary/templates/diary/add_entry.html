@@ -47,7 +47,7 @@
                         <button type="button" data-value="{{ i }}">{{ i }}</button>
                     {% endfor %}
                 </div>
-                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
+                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|default_if_none:'' }}">
                 <div class="predicted" id="predicted-{{ field.name }}"></div>
             {% endif %}
         {% endfor %}
@@ -56,10 +56,9 @@
 </div>
 
 <script>
-// CSRF токен из куки
 function getCookie(name) {
     let cookieValue = null;
-    if (document.cookie) {
+    if (document.cookie && document.cookie !== '') {
         document.cookie.split(';').forEach(cookie => {
             const [key, value] = cookie.trim().split('=');
             if (key === name) cookieValue = decodeURIComponent(value);
@@ -68,61 +67,66 @@ function getCookie(name) {
     return cookieValue;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", function () {
     const formValues = {};
     const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
-
     allKeys.forEach(name => {
         const input = document.getElementById(`input-${name}`);
-        if (input && input.value !== '') formValues[name] = input.value;
+        let val = input?.value || '';
+        if (val === 'None' || val === '') val = 0;
+        formValues[name] = val;
     });
 
-    const colorHint = v => v <= 1 ? 'green' : v <= 3 ? 'yellow' : 'red';
+    function colorHint(value) {
+        if (value <= 1) return "green";
+        if (value <= 3) return "yellow";
+        return "red";
+    }
 
-    const updatePredictions = data => {
-        Object.entries(data).forEach(([k,v]) => {
-            const div = document.getElementById(`predicted-${k}`);
-            if (div) {
-                const color = colorHint(v);
-                div.textContent = `💡 Прогноз: ${v}`;
-                div.dataset.color = color;
+    function updatePredictions(data) {
+        Object.entries(data).forEach(([key, val]) => {
+            const predDiv = document.getElementById("predicted-" + key);
+            if (predDiv) {
+                const color = colorHint(val);
+                predDiv.textContent = `💡 Прогноз: ${val}`;
+                predDiv.dataset.color = color;
             }
         });
-    };
+    }
 
-    const fetchPredictions = () => {
-        fetch('/predict/', {
-            method: 'POST',
+    function fetchPredictions() {
+        fetch("/predict/", {
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie('csrftoken')
             },
             body: JSON.stringify(formValues)
         })
-        .then(r => r.json())
-        .then(updatePredictions)
-        .catch(err => console.warn('Prediction error:', err));
-    };
+        .then(resp => resp.json())
+        .then(data => updatePredictions(data))
+        .catch(err => console.warn("Prediction error:", err));
+    }
 
     document.querySelectorAll('.rating-buttons').forEach(group => {
         const name = group.dataset.name;
         const hiddenInput = document.getElementById(`input-${name}`);
         const buttons = group.querySelectorAll('button');
-        const sel = hiddenInput?.value?.toString().trim();
+        const selectedValue = hiddenInput?.value?.toString().trim();
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
-                hiddenInput.value = btn.dataset.value;
-                formValues[name] = btn.dataset.value;
+                const value = btn.dataset.value;
+                hiddenInput.value = value;
+                formValues[name] = value;
                 buttons.forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 fetchPredictions();
             });
-            if (sel && parseFloat(btn.dataset.value) === parseFloat(sel)) {
+            if (selectedValue && parseFloat(btn.dataset.value) === parseFloat(selectedValue)) {
                 btn.classList.add('selected');
             }
         });
     });
-
     fetchPredictions();
 });
 </script>
