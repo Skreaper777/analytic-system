@@ -104,11 +104,13 @@ def predict_today(request):
 
     result = {}
     # Прогноз для каждого параметра
+        # Прогноз для каждого параметра (включая уже заданные пользователем)
     for target in df.columns:
-        if target == 'date' or target in today_row:
+        # пропускаем только дату
+        if target == 'date':
             continue
         try:
-            model_info = train_model(df, target, exclude=list(today_row.keys()))
+            model_info = train_model(df, target, exclude=[])  # больше не исключаем заданные параметры
             model = model_info['model']
             # Определяем правильный порядок признаков
             if hasattr(model, 'feature_names_in_'):
@@ -121,7 +123,6 @@ def predict_today(request):
                 if feat in today_row:
                     full_row[feat] = today_row[feat]
                 else:
-                    # используем среднее значение по столбцу
                     full_row[feat] = df[feat].mean()
             X_today = pd.DataFrame([full_row], columns=features)
             pred = model.predict(X_today)[0]
