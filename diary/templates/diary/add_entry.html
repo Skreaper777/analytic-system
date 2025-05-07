@@ -46,7 +46,7 @@
                     <div class="rating-buttons" data-name="{{ field.name }}">
                         {% for i in range_6 %}
                             <button type="button" data-value="{{ i }}"
-                                    {% if field.value|stringformat:'s' == i|stringformat:'s' %}class="selected"{% endif %}>
+                                    {% if field.value|stringformat:'s'|default:'' == i|stringformat:'s' %}class="selected"{% endif %}>
                                 {{ i }}
                             </button>
                         {% endfor %}
@@ -75,26 +75,41 @@ function getCookie(name) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+    console.log('DOM loaded, initializing diary form');
     const formValues = {};
+    // Initialize formValues and initial selection
     document.querySelectorAll('.rating-buttons').forEach(group => {
         const name = group.dataset.name;
-        const hiddenInput = document.getElementById(`id_${name}`) || document.getElementById(`input-${name}`) || document.querySelector(`input[name='${name}']`);
+        const hiddenInput = document.querySelector(`input[name='${name}']`);
+        console.log(`Field group for '${name}', hiddenInput:`, hiddenInput);
         if (hiddenInput && hiddenInput.value !== '') {
-            formValues[name] = hiddenInput.value;
+            // original raw value (may be float)
+            const raw = hiddenInput.value;
+            // normalize to integer string for matching data-value
+            const norm = String(parseInt(parseFloat(raw), 10));
+            formValues[name] = raw;
+            console.log(`Initial raw for ${name}:`, raw, 'normalized:', norm);
+            const selBtn = group.querySelector(`button[data-value="${norm}"]`);
+            if (selBtn) {
+                selBtn.classList.add('selected');
+                console.log(`Applied initial selection for ${name}:`, norm);
+            }
         }
+        // click handlers
         group.querySelectorAll('button').forEach(btn => {
             btn.addEventListener('click', () => {
                 const value = btn.dataset.value;
-                hiddenInput.value = value;
-                formValues[name] = value;
+                const rawValue = value; // now integer string
+                hiddenInput.value = rawValue;
+                formValues[name] = rawValue;
+                console.log(`Button click for ${name}, set value:`, rawValue);
                 group.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
-                // Сохраняем изменения сразу
+                // save immediately
                 fetch("{% url 'update_value' %}?date={{ today_str }}", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({ key: name, value: value !== '' ? parseFloat(value) : null })
-                });
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ key: name, value: parseFloat(rawValue) })
+                }).then(res => res.json()).then(resp => console.log('Update response for', name, resp));
                 fetchPredictions();
             });
         });
@@ -107,27 +122,32 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function updatePredictions(data) {
+        console.log('updatePredictions called with:', data);
         Object.entries(data).forEach(([key, val]) => {
-            const inputVal = parseFloat(document.querySelector(`input[name='${key}']`).value) || 0;
-            const diff = val - inputVal;
+            const inputEl = document.querySelector(`input[name='${key}']`);
+            const actual = parseFloat(inputEl ? inputEl.value : '0') || 0;
+            const diff = val - actual;
+            console.log(`Key: ${key}, predicted: ${val}, actual: ${actual}, diff: ${diff}`);
             const div = document.getElementById(`predicted-${key}`);
-            div.textContent = `💡 Прогноз: ${val}`;
-            div.dataset.color = colorHint(diff);
+            if (div) {
+                div.textContent = `💡 Прогноз: ${val}`;
+                div.dataset.color = colorHint(diff);
+            }
         });
     }
 
     function fetchPredictions() {
+        console.log('fetchPredictions sending', formValues);
         fetch(predictUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
             body: JSON.stringify(formValues)
         })
-        .then(resp => resp.json())
+        .then(resp => resp.json().then(data => { console.log('fetchPredictions received:', data); return data; }))
         .then(updatePredictions)
-        .catch(err => console.warn('Prediction error:', err));
+        .catch(err => console.error('Prediction error:', err));
     }
 
-    // Инициализация прогноза
+    // initial load
     fetchPredictions();
 });
 </script>
