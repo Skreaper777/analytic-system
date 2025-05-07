@@ -2,7 +2,7 @@ import logging
 from django.shortcuts import render, redirect
 from .models import Entry, EntryValue, Parameter
 from .forms import EntryForm
-from datetime import date
+from datetime import date, datetime
 
 # Настройка логгера для отладки
 logger = logging.getLogger(__name__)
@@ -13,14 +13,20 @@ logger.addHandler(console_handler)
 
 
 def add_entry(request):
-    today = date.today()
-    logger.debug(f"[add_entry] Today: {today}")
-    entry, created = Entry.objects.get_or_create(date=today)
+    # Определяем дату: из GET-параметра или текущая
+    date_str = request.GET.get('date')
+    try:
+        entry_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
+    except ValueError:
+        entry_date = date.today()
+        logger.debug(f"[add_entry] Invalid date format '{date_str}', fallback to today")
+
+    logger.debug(f"[add_entry] Entry date: {entry_date}")
+    entry, created = Entry.objects.get_or_create(date=entry_date)
     logger.debug(f"[add_entry] Entry fetched: id={entry.id}, created={created}, comment='{entry.comment}'")
 
     # Предзаполнение
     initial_data = {"comment": entry.comment}
-    logger.debug(f"[add_entry] Initial comment: {entry.comment}")
     for ev in EntryValue.objects.filter(entry=entry):
         initial_data[ev.parameter.key] = ev.value
         logger.debug(f"[add_entry] Pre-fill {ev.parameter.key} = {ev.value}")
@@ -46,15 +52,19 @@ def add_entry(request):
                         defaults={"value": val}
                     )
                     logger.debug(f"[add_entry] EntryValue for '{param.key}': value={ev_obj.value}, created={ev_created}")
-            return redirect("entry_success")
+            return redirect(f"/add/?date={entry_date}")
         else:
             logger.debug(f"[add_entry] Form errors: {form.errors}")
     else:
         form = EntryForm(initial=initial_data)
         logger.debug("[add_entry] Rendering form with initial data.")
 
-    context = {"form": form, "range_6": range(6)}
-    logger.debug(f"[add_entry] Context prepared, rendering template.")
+    context = {
+        "form": form,
+        "range_6": range(6),
+        "today_str": entry_date.strftime('%Y-%m-%d'),
+    }
+    logger.debug(f"[add_entry] Context prepared: date={context['today_str']}")
     return render(request, "diary/add_entry.html", context)
 
 
