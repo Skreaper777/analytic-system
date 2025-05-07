@@ -6,6 +6,8 @@
     <meta charset="UTF-8">
     <title>Форма дневника состояния</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {# Встраиваем JSON параметров для предсказаний #}
+    {{ parameter_keys|json_script:"param-keys" }}
     <style>
         body {
             font-family: sans-serif;
@@ -109,9 +111,7 @@
     <h2>📘 Дневник состояния</h2>
     <div class="date-selector">
         {% with request.GET.date|default:today_str as current_date %}
-        <form method="get">
-            <input type="date" name="date" value="{{ current_date }}" onchange="this.form.submit()">
-        </form>
+        <input type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
         {% endwith %}
     </div>
     <form method="post">
@@ -138,9 +138,12 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const formValues = {};
-    document.querySelectorAll("input[type=hidden]").forEach(input => {
-        if (input.value !== "") {
-            formValues[input.name] = input.value;
+    const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
+
+    allKeys.forEach(name => {
+        const input = document.getElementById(`input-${name}`);
+        if (input && input.value !== "") {
+            formValues[name] = input.value;
         }
     });
 

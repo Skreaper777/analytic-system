@@ -19,7 +19,6 @@ console_handler.setLevel(logging.DEBUG)
 logger.addHandler(console_handler)
 
 def add_entry(request):
-    # Определяем дату: из GET-параметра или текущая
     date_str = request.GET.get('date')
     try:
         entry_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
@@ -31,7 +30,6 @@ def add_entry(request):
     entry, created = Entry.objects.get_or_create(date=entry_date)
     logger.debug(f"[add_entry] Entry fetched: id={entry.id}, created={created}, comment='{entry.comment}'")
 
-    # Предзаполнение
     initial_data = {"comment": entry.comment}
     for ev in EntryValue.objects.filter(entry=entry):
         initial_data[ev.parameter.key] = ev.value
@@ -69,6 +67,7 @@ def add_entry(request):
         "form": form,
         "range_6": range(6),
         "today_str": entry_date.strftime('%Y-%m-%d'),
+        "parameter_keys": [p.key for p in Parameter.objects.filter(active=True)]
     }
     logger.debug(f"[add_entry] Context prepared: date={context['today_str']}")
     return render(request, "diary/add_entry.html", context)
