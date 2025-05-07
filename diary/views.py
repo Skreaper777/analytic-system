@@ -11,12 +11,23 @@ from .forms import EntryForm
 from .models import Entry, EntryValue, Parameter
 from .ml_utils import get_diary_dataframe, train_model
 
-# Настройка логгера для отладки
+# Настройка логгера для отладки: вывод в консоль и файл diary.log с форматированием времени
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter('[%(asctime)s] %(message)s', datefmt='%d/%b/%Y %H:%M:%S')
+
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
+console_handler.setFormatter(formatter)
+
+file_handler = logging.FileHandler('diary.log', encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+
+# Добавляем обработчики к логгеру
 logger.addHandler(console_handler)
+logger.addHandler(file_handler)
 
 def add_entry(request):
     date_str = request.GET.get('date')
@@ -103,27 +114,20 @@ def predict_today(request):
                 logger.warning("[predict_today] Non-numeric value for %s: %s", k, v)
 
     result = {}
-    # Прогноз для каждого параметра
-        # Прогноз для каждого параметра (включая уже заданные пользователем)
+    # Прогноз для каждого параметра (включая уже заданные пользователем)
     for target in df.columns:
-        # пропускаем только дату
         if target == 'date':
             continue
         try:
-            model_info = train_model(df, target, exclude=[])  # больше не исключаем заданные параметры
+            model_info = train_model(df, target, exclude=[])
             model = model_info['model']
-            # Определяем правильный порядок признаков
             if hasattr(model, 'feature_names_in_'):
                 features = list(model.feature_names_in_)
             else:
                 features = model_info['coefficients']['parameter']
-            # Формируем полную строку с заполнением отсутствующих значений средними
             full_row = {}
             for feat in features:
-                if feat in today_row:
-                    full_row[feat] = today_row[feat]
-                else:
-                    full_row[feat] = df[feat].mean()
+                full_row[feat] = today_row.get(feat, df[feat].mean())
             X_today = pd.DataFrame([full_row], columns=features)
             pred = model.predict(X_today)[0]
             result[target] = round(float(pred), 2)
