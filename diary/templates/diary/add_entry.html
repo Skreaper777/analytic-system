@@ -98,11 +98,11 @@
             {% else %}
                 <label>{{ field.label }}</label>
                 <div class="rating-buttons" data-name="{{ field.name }}">
-                    {% for i in "012345" %}
+                    {% for i in range_6 %}
                         <button type="button" data-value="{{ i }}">{{ i }}</button>
                     {% endfor %}
                 </div>
-                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default:'' }}">
+                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
                 <p style="font-size:0.9em; color: gray;">DEBUG: {{ field.name }} = {{ field.value }}</p>
             {% endif %}
         {% endfor %}
@@ -116,6 +116,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const name = group.dataset.name;
         const hiddenInput = document.getElementById(`input-${name}`);
         const buttons = group.querySelectorAll('button');
+        const selectedValue = hiddenInput?.value?.toString().trim();
 
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -125,14 +126,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 btn.classList.add('selected');
             });
 
-            // Подсветка при загрузке
-            if (btn.dataset.value === hiddenInput.value.toString().trim()) {
+            if (selectedValue && parseFloat(btn.dataset.value) === parseFloat(selectedValue)) {
                 btn.classList.add('selected');
             }
         });
     });
 });
 </script>
-
 </body>
 </html>
