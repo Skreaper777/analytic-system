@@ -40,16 +40,21 @@
             font-size: 1em;
         }
 
+        .field {
+            margin-bottom: 24px;
+        }
+
         .rating-buttons {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
+            margin-top: 6px;
         }
 
         .rating-buttons button {
             flex: 1;
-            padding: 12px;
-            font-size: 1.1em;
+            padding: 8px;
+            font-size: 0.9em;
             border: 2px solid #ccc;
             border-radius: 8px;
             background: white;
@@ -87,10 +92,6 @@
         button[type="submit"]:hover {
             background-color: #1e7e34;
         }
-
-        .field {
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
@@ -106,18 +107,20 @@
     <form method="post">
         {% csrf_token %}
         {% for field in form %}
-            {% if field.name == "comment" %}
-                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-            {% else %}
-                <label>{{ field.label }}</label>
-                <div class="rating-buttons" data-name="{{ field.name }}">
-                    {% for i in range_6 %}
-                        <button type="button" data-value="{{ i }}">{{ i }}</button>
-                    {% endfor %}
-                </div>
-                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
-            {% endif %}
+            <div class="field">
+                {% if field.name == "comment" %}
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                {% else %}
+                    <label>{{ field.label }}</label>
+                    <div class="rating-buttons" data-name="{{ field.name }}">
+                        {% for i in range_6 %}
+                            <button type="button" data-value="{{ i }}">{{ i }}</button>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
+                {% endif %}
+            </div>
         {% endfor %}
         <button type="submit">💾 Сохранить</button>
     </form>
