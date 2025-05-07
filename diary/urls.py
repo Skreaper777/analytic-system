@@ -4,4 +4,5 @@ from . import views
 urlpatterns = [
     path("add/", views.add_entry, name="add_entry"),
     path("success/", views.entry_success, name="entry_success"),
+    path("predict/", views.predict_today, name="predict_today"),  # ✅ добавлен путь для API прогноза
 ]
