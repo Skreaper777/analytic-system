@@ -1,15 +1,13 @@
 from django.shortcuts import render, redirect
-from django.http import HttpResponse
 from .models import Entry, EntryValue, Parameter
 from .forms import EntryForm
 from datetime import date
-
 
 def add_entry(request):
     today = date.today()
     entry, _ = Entry.objects.get_or_create(date=today)
 
-    # 🔹 Собираем данные для предзаполнения формы
+    # Предзаполнение
     initial_data = {"comment": entry.comment}
     for ev in EntryValue.objects.filter(entry=entry):
         initial_data[ev.parameter.key] = ev.value
@@ -30,9 +28,9 @@ def add_entry(request):
                     )
             return redirect("entry_success")
     else:
-        form = EntryForm(initial=initial_data)  # ← предзаполняем
+        form = EntryForm(initial=initial_data)
 
-    return render(request, "diary/add_entry.html", {"form": form})
+    return render(request, "diary/add_entry.html", {"form": form, "range_6": range(6)})
 
 def entry_success(request):
-    return HttpResponse("✅ Запись успешно добавлена или обновлена.")
+    return render(request, "diary/success.html")

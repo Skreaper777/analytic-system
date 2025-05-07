@@ -11,10 +11,9 @@ class EntryForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for param in Parameter.objects.filter(active=True):
-            self.fields[param.key] = forms.FloatField(
+            self.fields[param.key] = forms.IntegerField(
                 label=param.name_ru,
                 required=False,
                 min_value=0,
-                max_value=11.5,
-                widget=forms.NumberInput(attrs={'step': 0.5})
+                max_value=5
             )

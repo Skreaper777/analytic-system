@@ -26,42 +26,59 @@
             margin-bottom: 30px;
         }
 
-        form {
-            display: flex;
-            flex-direction: column;
-        }
-
         label {
             font-weight: bold;
-            margin-top: 15px;
+            display: block;
+            margin: 20px 0 10px;
             font-size: 1.1em;
         }
 
-        input[type="number"],
+        .rating-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .rating-buttons button {
+            flex: 1;
+            padding: 12px;
+            font-size: 1.1em;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .rating-buttons button.selected {
+            background-color: #28a745;
+            color: white;
+            border-color: #1e7e34;
+        }
+
         textarea {
+            width: 100%;
             padding: 10px;
             font-size: 1.1em;
             border: 1px solid #ccc;
             border-radius: 8px;
-            margin-top: 5px;
-            width: 100%;
-            box-sizing: border-box;
+            resize: vertical;
         }
 
-        button {
+        button[type="submit"] {
             margin-top: 30px;
             padding: 15px;
             font-size: 1.2em;
-            background-color: #007bff;
+            background-color: #28a745;
             color: white;
             border: none;
             border-radius: 10px;
             cursor: pointer;
-            transition: background-color 0.2s ease;
+            width: 100%;
         }
 
-        button:hover {
-            background-color: #0056b3;
+        button[type="submit"]:hover {
+            background-color: #1e7e34;
         }
 
         .field {
@@ -70,21 +87,52 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>📘 Дневник состояния</h2>
-        <form method="post">
-            {% csrf_token %}
-            {% for field in form %}
-                <div class="field">
-                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {{ field }}
-                    {% if field.errors %}
-                        <div style="color: red;">{{ field.errors }}</div>
-                    {% endif %}
+<div class="container">
+    <h2>📘 Дневник состояния</h2>
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+            {% if field.name == "comment" %}
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+            {% else %}
+                <label>{{ field.label }}</label>
+                <div class="rating-buttons" data-name="{{ field.name }}">
+                    {% for i in "012345" %}
+                        <button type="button" data-value="{{ i }}">{{ i }}</button>
+                    {% endfor %}
                 </div>
-            {% endfor %}
-            <button type="submit">💾 Сохранить</button>
-        </form>
-    </div>
+                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default:'' }}">
+                <p style="font-size:0.9em; color: gray;">DEBUG: {{ field.name }} = {{ field.value }}</p>
+            {% endif %}
+        {% endfor %}
+        <button type="submit">💾 Сохранить</button>
+    </form>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll('.rating-buttons').forEach(group => {
+        const name = group.dataset.name;
+        const hiddenInput = document.getElementById(`input-${name}`);
+        const buttons = group.querySelectorAll('button');
+
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const value = btn.dataset.value;
+                hiddenInput.value = value;
+                buttons.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+            });
+
+            // Подсветка при загрузке
+            if (btn.dataset.value === hiddenInput.value.toString().trim()) {
+                btn.classList.add('selected');
+            }
+        });
+    });
+});
+</script>
+
 </body>
 </html>
