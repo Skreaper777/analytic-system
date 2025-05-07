@@ -64,3 +64,5 @@ pip-log.txt
 secrets.json
 config.yaml
 local_settings.py
+
+*.xlsx
