@@ -72,6 +72,7 @@ def add_entry(request):
     logger.debug(f"[add_entry] Context prepared: date={context['today_str']}")
     return render(request, "diary/add_entry.html", context)
 
+
 def entry_success(request):
     return render(request, "diary/success.html")
 
@@ -94,7 +95,7 @@ def predict_today(request):
     result = {}
 
     for target in df.columns:
-        if target in ['date'] or target in today_row:
+        if target == 'date' or target in today_row:
             continue
         try:
             model_info = train_model(df, target, exclude=list(today_row.keys()))

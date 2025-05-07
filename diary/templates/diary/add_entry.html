@@ -6,104 +6,25 @@
     <meta charset="UTF-8">
     <title>Форма дневника состояния</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    {# Встраиваем JSON параметров для предсказаний #}
     {{ parameter_keys|json_script:"param-keys" }}
     <style>
-        body {
-            font-family: sans-serif;
-            background-color: #f4f4f4;
-            padding: 40px 20px;
-            margin: 0;
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px 40px;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-        }
-
-        h2 {
-            text-align: center;
-            margin-bottom: 10px;
-        }
-
-        .date-selector {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .date-selector input[type="date"] {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 1em;
-        }
-
-        .rating-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 5px;
-        }
-
-        .rating-buttons button {
-            flex: 1;
-            padding: 10px;
-            font-size: 0.9em;
-            border: 2px solid #ccc;
-            border-radius: 6px;
-            background: white;
-            cursor: pointer;
-            transition: 0.2s ease;
-        }
-
-        .rating-buttons button.selected {
-            background-color: #28a745;
-            color: white;
-            border-color: #1e7e34;
-        }
-
-        .predicted {
-            font-size: 0.85em;
-            color: #666;
-            margin-bottom: 10px;
-        }
-
+        /* стили без изменений */
+        body { font-family: sans-serif; background-color: #f4f4f4; padding: 40px 20px; margin: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+        h2 { text-align: center; margin-bottom: 10px; }
+        .date-selector { text-align: center; margin-bottom: 20px; }
+        .date-selector input[type="date"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+        .rating-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
+        .rating-buttons button { flex: 1; padding: 10px; font-size: 0.9em; border: 2px solid #ccc; border-radius: 6px; background: white; cursor: pointer; transition: 0.2s ease; }
+        .rating-buttons button.selected { background-color: #28a745; color: white; border-color: #1e7e34; }
+        .predicted { font-size: 0.85em; color: #666; margin-bottom: 10px; }
         .predicted[data-color="green"] { color: #28a745; }
         .predicted[data-color="yellow"] { color: #e0a800; }
         .predicted[data-color="red"] { color: #dc3545; }
-
-        textarea {
-            width: 100%;
-            padding: 10px;
-            font-size: 1.1em;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            resize: vertical;
-        }
-
-        button[type="submit"] {
-            margin-top: 30px;
-            padding: 15px;
-            font-size: 1.2em;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            width: 100%;
-        }
-
-        button[type="submit"]:hover {
-            background-color: #1e7e34;
-        }
-
-        .field {
-            margin-bottom: 10px;
-        }
+        textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
+        button[type="submit"] { margin-top: 30px; padding: 15px; font-size: 1.2em; background-color: #28a745; color: white; border: none; border-radius: 10px; cursor: pointer; width: 100%; }
+        button[type="submit"]:hover { background-color: #1e7e34; }
+        .field { margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -111,7 +32,7 @@
     <h2>📘 Дневник состояния</h2>
     <div class="date-selector">
         {% with request.GET.date|default:today_str as current_date %}
-        <input type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
+            <input type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
         {% endwith %}
     </div>
     <form method="post">
@@ -136,6 +57,18 @@
 </div>
 
 <script>
+// Функция для получения CSRF токена из куки
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        document.cookie.split(';').forEach(cookie => {
+            const [key, value] = cookie.trim().split('=');
+            if (key === name) cookieValue = decodeURIComponent(value);
+        });
+    }
+    return cookieValue;
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     const formValues = {};
     const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
@@ -167,7 +100,10 @@ document.addEventListener("DOMContentLoaded", function () {
     function fetchPredictions() {
         fetch("/predict/", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie('csrftoken')
+            },
             body: JSON.stringify(formValues)
         })
         .then(resp => resp.json())
@@ -197,6 +133,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
+    // Инициируем начальный запрос прогнозов
     fetchPredictions();
 });
 </script>
