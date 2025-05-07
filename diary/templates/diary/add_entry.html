@@ -1,3 +1,4 @@
+{% load tz %}
 {% now "Y-m-d" as today_str %}
 <!DOCTYPE html>
 <html lang="ru">
@@ -24,23 +25,19 @@
 
         h2 {
             text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .date-selector {
+            text-align: center;
             margin-bottom: 20px;
         }
 
-        .date-wrapper {
-            position: relative;
-            display: inline-block;
-        }
-
-        .date-link {
-            text-decoration: underline;
-            cursor: pointer;
-            color: #007bff;
-        }
-
-        #date-picker {
-            display: none;
-            margin-top: 5px;
+        .date-selector input[type="date"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
         }
 
         .rating-buttons {
@@ -90,18 +87,23 @@
         button[type="submit"]:hover {
             background-color: #1e7e34;
         }
+
+        .field {
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h2>
-        📘 Дневник состояния&nbsp;
-        <span class="date-wrapper">
-            <a id="date-link" class="date-link">сегодня</a>
-            <br>
-            <input type="date" id="date-picker" value="{{ today_str }}">
-        </span>
-    </h2>
+    <h2>📘 Дневник состояния</h2>
+    <div class="date-selector">
+        {% with request.GET.date|default:today_str as current_date %}
+        <form method="get">
+            <input type="date" name="date" value="{{ current_date }}">
+            <button type="submit">Выбрать дату</button>
+        </form>
+        {% endwith %}
+    </div>
     <form method="post">
         {% csrf_token %}
         {% for field in form %}
@@ -116,6 +118,7 @@
                     {% endfor %}
                 </div>
                 <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
+                <p style="font-size:0.9em; color: gray;">DEBUG: {{ field.name }} = {{ field.value }}</p>
             {% endif %}
         {% endfor %}
         <button type="submit">💾 Сохранить</button>
@@ -124,27 +127,6 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-    const dateLink = document.getElementById('date-link');
-    const datePicker = document.getElementById('date-picker');
-
-    dateLink.addEventListener('click', function(e) {
-        e.preventDefault();
-        // Показать/скрыть календарь
-        if (datePicker.style.display === 'none' || !datePicker.style.display) {
-            datePicker.style.display = 'block';
-            datePicker.focus();
-        } else {
-            datePicker.style.display = 'none';
-        }
-    });
-
-    datePicker.addEventListener('change', function() {
-        const selected = this.value;
-        const base = window.location.pathname.split('?')[0];
-        window.location.href = `${base}?date=${selected}`;
-    });
-
-    // Подсветка рейтинговых кнопок
     document.querySelectorAll('.rating-buttons').forEach(group => {
         const name = group.dataset.name;
         const hiddenInput = document.getElementById(`input-${name}`);
