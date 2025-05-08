@@ -124,8 +124,8 @@ def predict_today(request):
                         flag_name = f"{key}_есть"
                         if flag_name in feature_names:
                             row_copy[flag_name] = 1 if row_copy.get(key, 0) > 0 else 0
-
                 X_today = pd.DataFrame([{k: row_copy.get(k, 0) for k in feature_names}])
+                logger.debug(f"[{model_name}] X_today for target={target}: {X_today.to_dict(orient='records')}")
                 pred = model.predict(X_today)[0]
                 predictions[target] = round(float(pred), 2)
                 logger.debug(f"[{model_name}] Predicted {target} = {predictions[target]}")
