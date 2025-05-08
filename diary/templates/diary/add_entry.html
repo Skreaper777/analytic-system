@@ -14,54 +14,19 @@
         .date-selector input[type="date"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
 
         /* rating buttons layout */
-        .rating-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 5px; /* keep small gap between row and label */
-        }
-        /* compact square buttons, no stretching */
-        .rating-buttons button {
-            width: 2.5rem;   /* 50% of previous ~5rem */
-            height: 2.5rem;
-            padding: 0;
-            font-size: 0.9em;
-            border: 2px solid #ccc;
-            border-radius: 6px;
-            background: white;
-            cursor: pointer;
-            transition: 0.2s ease;
-            flex: 0 0 auto;  /* no grow, no shrink */
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .rating-buttons button.selected {
-            background-color: #28a745;
-            color: white;
-            border-color: #1e7e34;
-        }
+        .rating-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
+        .rating-buttons button { width: 2.5rem; height: 2.5rem; padding: 0; font-size: 0.9em; border: 2px solid #ccc; border-radius: 6px; background: white; cursor: pointer; transition: 0.2s ease; flex: 0 0 auto; display: inline-flex; justify-content: center; align-items: center; }
+        .rating-buttons button.selected { background-color: #28a745; color: white; border-color: #1e7e34; }
 
         /* prediction hints */
         .predicted { font-size: 0.85em; color: #666; margin-bottom: 4px; }
         .predicted[data-color="green"]  { color: #28a745; }
         .predicted[data-color="yellow"] { color: #e0a800; }
         .predicted[data-color="red"]    { color: #dc3545; }
-        .predicted-secondary { font-size: 0.75em; color: #888; margin-bottom: 20px; } /* 2× прежнего 10px */
+        .predicted-secondary { font-size: 0.75em; color: #888; margin-bottom: 20px; }
 
-        /* comment textarea & submit */
         textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
-        button[type="submit"] {
-            margin-top: 30px;
-            padding: 15px;
-            font-size: 1.2em;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            width: 100%;
-        }
+        button[type="submit"] { margin-top: 30px; padding: 15px; font-size: 1.2em; background-color: #28a745; color: white; border: none; border-radius: 10px; cursor: pointer; width: 100%; }
         button[type="submit"]:hover { background-color: #1e7e34; }
     </style>
 </head>
@@ -96,126 +61,110 @@
 </div>
 
 <script>
-const predictUrl = "{% url 'predict_today' %}";
-const updateUrl = "{% url 'update_value' %}";
-const entryDate = "{{ today_str }}";
+    // URL‑ы только через namespace `diary`
+    const predictUrl = "{% url 'diary:predict_today' %}";
+    const updateUrl  = "{% url 'diary:update_value' %}";
+    const entryDate  = "{{ today_str }}";
 
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        document.cookie.split(';').forEach(cookie => {
-            const [key, value] = cookie.trim().split('=');
-            if (key === name) cookieValue = decodeURIComponent(value);
-        });
-    }
-    return cookieValue;
-}
-
-// -------------- UI & PREDICTION LOGIC -------------------
-
-document.addEventListener("DOMContentLoaded", function () {
-    const formValues = {};
-    const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
-
-    allKeys.forEach(name => {
-        const input = document.getElementById(`input-${name}`);
-        if (input && input.value !== "") {
-            formValues[name] = input.value;
-        }
-    });
-
-    function colorHint(diff) {
-        if (Math.abs(diff) < 1) return "green";
-        if (Math.abs(diff) <= 2) return "yellow";
-        return "red";
-    }
-
-    function updatePredictions(data) {
-        Object.entries(data).forEach(([modelName, predictions]) => {
-            Object.entries(predictions).forEach(([key, val]) => {
-                const predDiv = document.getElementById("predicted-" + key);
-                if (predDiv) {
-                    const modelId = `model-${modelName}`;
-                    let modelBlock = document.getElementById(modelId + "-" + key);
-                    if (!modelBlock) {
-                        modelBlock = document.createElement("div");
-                        modelBlock.className = "predicted";
-                        modelBlock.id = modelId + "-" + key;
-                        predDiv.appendChild(modelBlock);
-                    }
-                    const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
-                    const diff = val - inputVal;
-                    modelBlock.textContent = `${modelName}: ${val}`;
-                    modelBlock.dataset.color = colorHint(diff);
-                }
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            document.cookie.split(';').forEach(cookie => {
+                const [key, value] = cookie.trim().split('=');
+                if (key === name) cookieValue = decodeURIComponent(value);
             });
-        });
+        }
+        return cookieValue;
     }
 
-    function fetchPredictions() {
-        fetch(predictUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie('csrftoken')
-            },
-            body: JSON.stringify(formValues)
-        })
-        .then(resp => resp.json())
-        .then(data => updatePredictions(data))
-        .catch(err => console.warn("Prediction error:", err));
-    }
+    document.addEventListener("DOMContentLoaded", function () {
+        const formValues = {};
+        const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
 
-    document.querySelectorAll('.rating-buttons').forEach(group => {
-        const name = group.dataset.name;
-        const hiddenInput = document.getElementById(`input-${name}`);
-        const buttons = group.querySelectorAll('button');
-
-        // Mark selected button on load
-        buttons.forEach(btn => {
-            if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
-                btn.classList.add('selected');
+        allKeys.forEach(name => {
+            const input = document.getElementById(`input-${name}`);
+            if (input && input.value !== "") {
+                formValues[name] = input.value;
             }
         });
 
-        // Click handler
-        buttons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const isActive = btn.classList.contains('selected');
-                let valueToSend;
+        function colorHint(diff) {
+            if (Math.abs(diff) < 1) return "green";
+            if (Math.abs(diff) <= 2) return "yellow";
+            return "red";
+        }
 
-                if (isActive) {
-                    hiddenInput.value = '';
-                    delete formValues[name];
-                    buttons.forEach(b => b.classList.remove('selected'));
-                    valueToSend = null;
-                } else {
-                    const val = btn.dataset.value;
-                    hiddenInput.value = val;
-                    formValues[name] = val;
-                    buttons.forEach(b => b.classList.remove('selected'));
-                    btn.classList.add('selected');
-                    valueToSend = parseFloat(val);
+        function updatePredictions(data) {
+            Object.entries(data).forEach(([key, val]) => {
+                const predDiv = document.getElementById("predicted-" + key);
+                if (predDiv) {
+                    const diff = val - (parseFloat(document.getElementById(`input-${key}`).value) || 0);
+                    predDiv.textContent = `Прогноз: ${val}`;
+                    predDiv.dataset.color = colorHint(diff);
                 }
+            });
+        }
 
-                fetchPredictions();
-                fetch(`${updateUrl}?date=${entryDate}`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRFToken": getCookie('csrftoken')
-                    },
-                    body: JSON.stringify({ key: name, value: valueToSend })
+        function fetchPredictions() {
+            fetch(predictUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie('csrftoken')
+                },
+                body: JSON.stringify(formValues)
+            })
+            .then(resp => resp.json())
+            .then(data => updatePredictions(data))
+            .catch(err => console.warn("Prediction error:", err));
+        }
+
+        document.querySelectorAll('.rating-buttons').forEach(group => {
+            const name = group.dataset.name;
+            const hiddenInput = document.getElementById(`input-${name}`);
+            const buttons = group.querySelectorAll('button');
+
+            buttons.forEach(btn => {
+                if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
+                    btn.classList.add('selected');
+                }
+            });
+
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const isActive = btn.classList.contains('selected');
+                    let valueToSend;
+
+                    if (isActive) {
+                        hiddenInput.value = '';
+                        delete formValues[name];
+                        buttons.forEach(b => b.classList.remove('selected'));
+                        valueToSend = null;
+                    } else {
+                        const val = btn.dataset.value;
+                        hiddenInput.value = val;
+                        formValues[name] = val;
+                        buttons.forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        valueToSend = parseFloat(val);
+                    }
+
+                    fetchPredictions();
+                    fetch(updateUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": getCookie('csrftoken')
+                        },
+                        body: JSON.stringify({ parameter: name, value: valueToSend, date: entryDate })
+                    });
                 });
             });
         });
+
+        // Initial prediction on page load
+        fetchPredictions();
     });
-
-    // First prediction on page load
-    fetchPredictions();
-});
 </script>
-
-
 </body>
 </html>

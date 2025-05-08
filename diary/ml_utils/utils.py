@@ -1,4 +1,14 @@
 # ---------- diary/ml_utils/utils.py ----------
+"""Utility helpers for ML data preparation.
+
+* Экспортирует «сырые» данные в Excel с человеческими названиями столбцов
+  (на русском) **без** автозаполнения нулями,
+* а для обучения/предсказаний возвращает DataFrame с **machine‑friendly**
+  `Parameter.key`‑колонками, где пропуски заменены на `0.0`.
+"""
+
+from __future__ import annotations
+
 import logging
 from typing import Dict, List
 
@@ -6,48 +16,50 @@ import pandas as pd
 
 from diary.models import Entry, EntryValue, Parameter
 
-logger = logging.getLogger('diary.ml_utils.utils')
+logger = logging.getLogger("diary.ml_utils.utils")
 
 
 def get_diary_dataframe() -> pd.DataFrame:
-    """Загружает все записи дневника в виде **pandas.DataFrame**.
+    """Собирает все записи дневника в два представления.
 
-    * Строки* — даты (`Entry.date`).
-    * Столбцы* — machine‑friendly ключи параметров (`Parameter.key`).
-    * Значения* — числовые оценки пользователя.
-
-    💡 **Отладка**: отдельно сохраняем копию DataFrame c *русскими названиями*
-    параметров (`Parameter.name_ru`) в `debug_diary_dataframe.xlsx`. Это не
-    влияет на работу ML‑части и остальных функций.
+    1. **df_excel** — колонки = `Parameter.name_ru`, пропуски *оставлены пустыми*;
+       сохраняется в *debug_diary_dataframe.xlsx* для анализа.
+    2. **df_keys**  — колонки = `Parameter.key`, пропуски -> `0.0`;
+       именно его функция *возвращает* для ML‑моделей.
     """
 
-    entries = Entry.objects.all().order_by('date')
-    parameters = Parameter.objects.filter(active=True)
-
+    # --- Справочники ---
+    parameters: List[Parameter] = list(Parameter.objects.filter(active=True))
     id_to_key: Dict[int, str] = {p.id: p.key for p in parameters}
+    id_to_name: Dict[int, str] = {p.id: p.name_ru for p in parameters}
 
-    data: List[dict] = []
-    for entry in entries:
-        row = {'date': entry.date}
-        values = EntryValue.objects.filter(entry=entry)
-        for ev in values:
+    # --- Сбор строк как «key»‑ и «name_ru»‑словарей параллельно ---
+    rows_keys: List[Dict[str, object]] = []
+    rows_names: List[Dict[str, object]] = []
+
+    for entry in Entry.objects.all().order_by("date"):
+        row_k: Dict[str, object] = {"date": entry.date}
+        row_n: Dict[str, object] = {"date": entry.date}
+
+        for ev in EntryValue.objects.filter(entry=entry):
             key = id_to_key.get(ev.parameter_id)
+            name = id_to_name.get(ev.parameter_id)
             if key:
-                row[key] = ev.value
-        data.append(row)
+                row_k[key] = ev.value
+            if name:
+                row_n[name] = ev.value
 
-    # DataFrame с ключами — используется повсеместно
-    df = pd.DataFrame(data).fillna(0.0)
+        rows_keys.append(row_k)
+        rows_names.append(row_n)
 
-    logger.debug('🧞 DataFrame head (keys):\n%s', df.head(10).to_string())
+    # --- DataFrames ---
+    df_keys: pd.DataFrame = pd.DataFrame(rows_keys)
+    df_names: pd.DataFrame = pd.DataFrame(rows_names)
 
-    # ---- Excel‑вариант ----
-    key_to_name = {p.key: p.name_ru for p in parameters}
-    df_excel = df.rename(columns=key_to_name)
-    try:
-        df_excel.to_excel('debug_diary_dataframe.xlsx', index=False)
-        logger.debug('📝 debug_diary_dataframe.xlsx обновлён (%d строк)', len(df_excel))
-    except Exception as exc:
-        logger.warning('Не удалось сохранить debug_diary_dataframe.xlsx: %s', exc)
+    # --- Экспорт «человеческого» варианта ---
+    df_names.to_excel("debug_diary_dataframe.xlsx", index=False)
 
-    return df
+    # --- Лог и возврат «machine»‑варианта ---
+    logger.debug("🧞 DataFrame head used for training:\n%s", df_keys.head(10).to_string())
+
+    return df_keys.fillna(0.0)
