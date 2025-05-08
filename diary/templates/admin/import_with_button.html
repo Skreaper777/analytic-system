@@ -2,9 +2,11 @@
 
 {% block object-tools %}
     <div style="margin-bottom: 10px;">
-        <a class="button" href="{% url 'admin:import_excel' %}" style="background-color: #28a745; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none;">
-            📥 Импорт Excel
-        </a>
+        <form method="post" action="{% url 'admin:import_excel' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="file" name="excel_file" accept=".xlsx" required>
+            <button type="submit" class="button" style="background-color: #28a745; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none;">📥 Импорт Excel</button>
+        </form>
     </div>
     {{ block.super }}
 {% endblock %}

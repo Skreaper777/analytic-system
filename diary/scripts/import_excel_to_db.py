@@ -67,4 +67,8 @@ def run_excel_import():
     if entry_values_to_update:
         EntryValue.objects.bulk_update(entry_values_to_update, ["value"])
 
-    print(f"\n✅ Импорт завершён. Создано: {len(entry_values_to_create)}, обновлено: {len(entry_values_to_update)}")
+    created_count = len(entry_values_to_create)
+    updated_count = len(entry_values_to_update)
+
+    print(f"\n✅ Импорт завершён. Создано: {created_count}, обновлено: {updated_count}")
+    return created_count, updated_count
