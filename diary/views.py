@@ -1,10 +1,9 @@
 # diary/views.py
-"""Вьюхи дневника (актуализированы).
+"""Вьюхи дневника – актуальная версия.
 
-Контекст `add_entry` теперь содержит:
-• today_str  – ISO дата сегодня,
-• parameter_keys – список ключей активных параметров (для JS),
-• range_6 – range(6) для отрисовки кнопок 0‒5.
+Главное изменение: эндпоинт `predict_today` теперь возвращает
+прогнозы с **machine-key** в качестве ключей, чтобы их можно было
+надёжно сопоставить с id элементов в шаблоне (div#predicted-<key>).
 """
 from __future__ import annotations
 
@@ -57,7 +56,6 @@ def add_entry(request):
     entry, _ = Entry.objects.get_or_create(date=entry_date)
     form = EntryForm(instance=entry)
 
-    # Список ключей активных параметров – для JS
     parameter_keys = list(Parameter.objects.filter(active=True).values_list("key", flat=True))
 
     context = {
@@ -87,16 +85,16 @@ def update_value(request):
 
     try:
         data = json.loads(request.body.decode("utf-8"))
-        param_name = data["parameter"]
+        param_key = data["parameter"]
         value = _safe_float(data["value"])
         day = datetime.strptime(data["date"], "%Y-%m-%d").date()
     except (KeyError, ValueError, json.JSONDecodeError) as exc:
         return JsonResponse({"error": str(exc)}, status=400)
 
     entry, _ = Entry.objects.get_or_create(date=day)
-    parameter = Parameter.objects.get(key=param_name)
+    parameter = Parameter.objects.get(key=param_key)
     EntryValue.objects.update_or_create(entry=entry, parameter=parameter, defaults={"value": value})
-    logger.debug("update_value: %s=%s on %s", param_name, value, day)
+    logger.debug("update_value: %s=%s on %s", param_key, value, day)
     return JsonResponse({"status": "ok"})
 
 # ---------------------------------------------------------------------------
@@ -105,6 +103,7 @@ def update_value(request):
 
 @csrf_exempt
 def predict_today(request):
+    """Возвращает прогнозы {param_key: value} для всех числовых колонок."""
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
@@ -116,16 +115,21 @@ def predict_today(request):
     df = get_diary_dataframe().copy()
     numeric_columns = [c for c in df.columns if c not in ("date",)]
 
-    today_row = {col: _safe_float(user_input.get(col, 0.0)) for col in numeric_columns}
+    # Карта «rus name» → "key"
+    name_to_key = {p.name_ru: p.key for p in Parameter.objects.filter(active=True)}
 
-    predictions: dict[str, float] = {}
+    # today_row формируем по колонкам из df (русские названия), lookup в user_input по key
+    today_row = {col: _safe_float(user_input.get(name_to_key.get(col, col), 0.0)) for col in numeric_columns}
+
+    result: dict[str, float] = {}
     for target in numeric_columns:
         exclude = list(today_row.keys())
-        if target in exclude:
-            exclude.remove(target)
+        exclude.remove(target) if target in exclude else None
+
         model_info = base_model.train_model(df, target, exclude=exclude)
         model = model_info["model"]
         X_today = pd.DataFrame([{k: today_row.get(k, 0.0) for k in model.feature_names_in_}])
-        predictions[target] = round(float(model.predict(X_today)[0]), 2)
+        pred_val = round(float(model.predict(X_today)[0]), 2)
+        result[name_to_key.get(target, target)] = pred_val  # ключ = machine-key
 
-    return JsonResponse(predictions)
+    return JsonResponse(result)
