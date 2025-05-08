@@ -1,5 +1,6 @@
 # diary/ml_utils/utils.py
 import pandas as pd
+import logging
 from diary.models import Entry, EntryValue, Parameter
 
 def get_diary_dataframe():
@@ -22,4 +23,8 @@ def get_diary_dataframe():
 
     df = pd.DataFrame(data)
     df = df.fillna(0.0)
+
+    logger = logging.getLogger('diary.ml_utils.utils')
+    logger.debug(f"🧞 DataFrame head used for training:\n{df.head(10).to_string()}")
+
     return df

@@ -58,7 +58,6 @@
 
 <script>
 const predictUrl = "{% url 'predict_today' %}";
-const altPredictUrl = predictUrl + "?model=flags";
 const updateUrl = "{% url 'update_value' %}";
 const entryDate = "{{ today_str }}";
 
@@ -90,18 +89,25 @@ document.addEventListener("DOMContentLoaded", function () {
         return "red";
     }
 
-    function updatePredictions(data, isAlt = false) {
-        Object.entries(data).forEach(([key, val]) => {
-            const predDiv = document.getElementById((isAlt ? "predicted-alt-" : "predicted-") + key);
-            if (predDiv) {
-                const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
-                const diff = val - inputVal;
-                const label = isAlt ? "🔄 Альт-прогноз:" : "💡 Прогноз:";
-                predDiv.textContent = `${label} ${val}`;
-                if (!isAlt) {
-                    predDiv.dataset.color = colorHint(diff);
+    function updatePredictions(data) {
+        Object.entries(data).forEach(([modelName, predictions]) => {
+            Object.entries(predictions).forEach(([key, val]) => {
+                const predDiv = document.getElementById("predicted-" + key);
+                if (predDiv) {
+                    const modelId = `model-${modelName}`;
+                    let modelBlock = document.getElementById(modelId + "-" + key);
+                    if (!modelBlock) {
+                        modelBlock = document.createElement("div");
+                        modelBlock.className = "predicted";
+                        modelBlock.id = modelId + "-" + key;
+                        predDiv.appendChild(modelBlock);
+                    }
+                    const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
+                    const diff = val - inputVal;
+                    modelBlock.textContent = `${modelName}: ${val}`;
+                    modelBlock.dataset.color = colorHint(diff);
                 }
-            }
+            });
         });
     }
 
@@ -115,20 +121,8 @@ document.addEventListener("DOMContentLoaded", function () {
             body: JSON.stringify(formValues)
         })
         .then(resp => resp.json())
-        .then(data => updatePredictions(data, false))
+        .then(data => updatePredictions(data))
         .catch(err => console.warn("Prediction error:", err));
-
-        fetch(altPredictUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie('csrftoken')
-            },
-            body: JSON.stringify(formValues)
-        })
-        .then(resp => resp.json())
-        .then(data => updatePredictions(data, true))
-        .catch(err => console.warn("Alt prediction error:", err));
     }
 
     document.querySelectorAll('.rating-buttons').forEach(group => {
@@ -177,5 +171,7 @@ document.addEventListener("DOMContentLoaded", function () {
     fetchPredictions();
 });
 </script>
+
+
 </body>
 </html>

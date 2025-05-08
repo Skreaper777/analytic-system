@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from .forms import EntryForm
 from .models import Entry, EntryValue, Parameter
 from .ml_utils.utils import get_diary_dataframe
-from .ml_utils import base_model, flags_model
+from .ml_utils import base_model, flags_model, hybrid_model
 
 logger = logging.getLogger('diary.views')
 logger.setLevel(logging.DEBUG)
@@ -100,34 +100,40 @@ def predict_today(request):
 
     logger.debug(f"Final today_row with zero fill: {today_row}")
 
-    model_key = request.GET.get("model", "base")
-    train_model = {
-        "base": base_model.train_model,
-        "flags": flags_model.train_model
-    }.get(model_key, base_model.train_model)
+    model_map = {
+        "base_model": base_model.train_model,
+        "flags_model": flags_model.train_model,
+        "hybrid_model": hybrid_model.train_model
+    }
 
-    for target in numeric_columns:
-        try:
-            exclude = [col for col in df.columns if col not in today_row or col == 'date' or col == target]
-            model_info = train_model(df, target, exclude=exclude)
-            model = model_info['model']
-            feature_names = list(model.feature_names_in_)
+    all_results = {}
 
-            # Добавляем флаги *_есть в today_row для модели flags
-            if model_key == 'flags':
-                for key in numeric_columns:
-                    flag_name = f"{key}_есть"
-                    if flag_name in feature_names:
-                        today_row[flag_name] = 1 if today_row.get(key, 0) > 0 else 0
+    for model_name, model_func in model_map.items():
+        predictions = {}
+        for target in numeric_columns:
+            try:
+                exclude = [col for col in df.columns if col not in today_row or col == 'date' or col == target]
+                model_info = model_func(df, target, exclude=exclude)
+                model = model_info['model']
+                feature_names = list(model.feature_names_in_)
 
-            X_today = pd.DataFrame([{k: today_row.get(k, 0) for k in feature_names}])
-            pred = model.predict(X_today)[0]
-            result[target] = round(float(pred), 2)
-            logger.debug(f"Predicted {target} = {result[target]}")
-        except Exception as e:
-            logger.debug(f"Prediction error for {target}: {e}")
+                # Добавляем флаги *_есть в today_row для нужных моделей
+                row_copy = today_row.copy()
+                if model_name in ('flags_model', 'hybrid_model'):
+                    for key in numeric_columns:
+                        flag_name = f"{key}_есть"
+                        if flag_name in feature_names:
+                            row_copy[flag_name] = 1 if row_copy.get(key, 0) > 0 else 0
 
-    return JsonResponse(result)
+                X_today = pd.DataFrame([{k: row_copy.get(k, 0) for k in feature_names}])
+                pred = model.predict(X_today)[0]
+                predictions[target] = round(float(pred), 2)
+                logger.debug(f"[{model_name}] Predicted {target} = {predictions[target]}")
+            except Exception as e:
+                logger.debug(f"Prediction error for {target} in {model_name}: {e}")
+        all_results[model_name] = predictions
+
+    return JsonResponse(all_results)
 
 
 @csrf_exempt
