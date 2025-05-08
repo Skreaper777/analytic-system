@@ -7,25 +7,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {{ parameter_keys|json_script:"param-keys" }}
     <style>
-        body { font-family: sans-serif; background-color: #f4f4f4; padding: 40px 20px; margin: 0; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+        body { font-family: sans-serif; background-color: #1e1e1e; color: #eee; padding: 40px 20px; margin: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #111; padding: 30px 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
         h2 { text-align: center; margin-bottom: 10px; }
         .date-selector { text-align: center; margin-bottom: 20px; }
-        .date-selector input[type="date"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+        .date-selector input[type="date"] { padding: 8px; border: 1px solid #444; border-radius: 4px; font-size: 1em; background:#222; color:#eee; }
 
-        /* rating buttons layout */
         .rating-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
-        .rating-buttons button { width: 2.5rem; height: 2.5rem; padding: 0; font-size: 0.9em; border: 2px solid #ccc; border-radius: 6px; background: white; cursor: pointer; transition: 0.2s ease; flex: 0 0 auto; display: inline-flex; justify-content: center; align-items: center; }
-        .rating-buttons button.selected { background-color: #28a745; color: white; border-color: #1e7e34; }
+        .rating-buttons button { width: 2.5rem; height: 2.5rem; padding: 0; font-size: 0.9em; border: 2px solid #444; border-radius: 6px; background: #222; color:#eee; cursor: pointer; transition: 0.2s ease; flex: 0 0 auto; display: inline-flex; justify-content: center; align-items: center; }
+        .rating-buttons button.selected { background-color: #28a745; color: white; border-color: #28a745; }
 
-        /* prediction hints */
-        .predicted { font-size: 0.85em; color: #666; margin-bottom: 4px; }
+        .predicted { font-size: 0.85em; color: #aaa; margin-bottom: 2px; }
         .predicted[data-color="green"]  { color: #28a745; }
         .predicted[data-color="yellow"] { color: #e0a800; }
         .predicted[data-color="red"]    { color: #dc3545; }
-        .predicted-secondary { font-size: 0.75em; color: #888; margin-bottom: 20px; }
+        .predicted-secondary { font-size: 0.75em; color: #888; margin-bottom: 18px; }
 
-        textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
+        textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #444; border-radius: 8px; resize: vertical; background:#222; color:#eee; }
         button[type="submit"] { margin-top: 30px; padding: 15px; font-size: 1.2em; background-color: #28a745; color: white; border: none; border-radius: 10px; cursor: pointer; width: 100%; }
         button[type="submit"]:hover { background-color: #1e7e34; }
     </style>
@@ -61,7 +59,6 @@
 </div>
 
 <script>
-    // URL‑ы только через namespace `diary`
     const predictUrl = "{% url 'diary:predict_today' %}";
     const updateUrl  = "{% url 'diary:update_value' %}";
     const entryDate  = "{{ today_str }}";
@@ -81,6 +78,7 @@
         const formValues = {};
         const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
 
+        // Pre-fill formValues from initial values
         allKeys.forEach(name => {
             const input = document.getElementById(`input-${name}`);
             if (input && input.value !== "") {
@@ -96,12 +94,14 @@
 
         function updatePredictions(data) {
             Object.entries(data).forEach(([key, val]) => {
-                const predDiv = document.getElementById("predicted-" + key);
-                if (predDiv) {
-                    const diff = val - (parseFloat(document.getElementById(`input-${key}`).value) || 0);
-                    predDiv.textContent = `Прогноз: ${val}`;
-                    predDiv.dataset.color = colorHint(diff);
-                }
+                const predDiv = document.getElementById(`predicted-${key}`);
+                const altDiv  = document.getElementById(`predicted-alt-${key}`);
+                if (!predDiv) return;
+                const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
+                const diff = val - inputVal;
+                predDiv.textContent = `Прогноз: ${val.toFixed(1)}`;
+                predDiv.dataset.color = colorHint(diff);
+                if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
             });
         }
 
@@ -115,7 +115,7 @@
                 body: JSON.stringify(formValues)
             })
             .then(resp => resp.json())
-            .then(data => updatePredictions(data))
+            .then(updatePredictions)
             .catch(err => console.warn("Prediction error:", err));
         }
 
@@ -124,6 +124,7 @@
             const hiddenInput = document.getElementById(`input-${name}`);
             const buttons = group.querySelectorAll('button');
 
+            // Highlight selected on load
             buttons.forEach(btn => {
                 if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
                     btn.classList.add('selected');
@@ -162,7 +163,7 @@
             });
         });
 
-        // Initial prediction on page load
+        // Initial prediction
         fetchPredictions();
     });
 </script>
