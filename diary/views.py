@@ -1,3 +1,4 @@
+# diary/views.py
 import logging
 import json
 from datetime import date, datetime
@@ -18,6 +19,7 @@ file_handler = logging.FileHandler('diary.log', encoding='utf-8')
 formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(funcName)s] %(message)s', datefmt='%d/%b/%Y %H:%M:%S')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
+
 
 def add_entry(request):
     date_str = request.GET.get('date')
@@ -45,13 +47,22 @@ def add_entry(request):
             entry.comment = form.cleaned_data['comment']
             entry.save()
             for param in Parameter.objects.filter(active=True):
+                # Save only the parameters user actually interacted with
+                if param.key not in request.POST:
+                    continue
+
                 val = form.cleaned_data.get(param.key)
-                if val is not None:
-                    EntryValue.objects.update_or_create(
-                        entry=entry,
-                        parameter=param,
-                        defaults={'value': val}
-                    )
+
+                # If cleared — delete
+                if val in (None, ''):
+                    EntryValue.objects.filter(entry=entry, parameter=param).delete()
+                    continue
+
+                EntryValue.objects.update_or_create(
+                    entry=entry,
+                    parameter=param,
+                    defaults={'value': val}
+                )
             return redirect(f"/add/?date={entry_date}")
         else:
             logger.debug(f"Form errors: {form.errors}")
@@ -87,50 +98,47 @@ def predict_today(request):
     except Exception as e:
         return JsonResponse({'error': f'Data error: {str(e)}'}, status=500)
 
-    result = {}
-    numeric_columns = [col for col in df.columns if col not in ('date',)]
+    numeric_columns = [col for col in df.columns if col != 'date']
     today_row = {}
-
     for col in numeric_columns:
         val = user_input.get(col)
         try:
-            today_row[col] = float(val) if val != '' and val is not None else 0.0
+            today_row[col] = float(val) if val not in ('', None) else 0.0
         except (TypeError, ValueError):
             today_row[col] = 0.0
-
     logger.debug(f"Final today_row with zero fill: {today_row}")
 
     model_map = {
-        "base_model": base_model.train_model,
-        "flags_model": flags_model.train_model,
-        "hybrid_model": hybrid_model.train_model
+        'base_model': base_model.train_model,
+        'flags_model': flags_model.train_model,
+        'hybrid_model': hybrid_model.train_model,
     }
 
     all_results = {}
-
     for model_name, model_func in model_map.items():
         predictions = {}
         for target in numeric_columns:
             try:
-                exclude = [col for col in df.columns if col not in today_row or col == 'date' or col == target]
+                exclude = [col for col in df.columns if col not in today_row or col in ('date', target)]
                 model_info = model_func(df, target, exclude=exclude)
                 model = model_info['model']
                 feature_names = list(model.feature_names_in_)
 
-                # Добавляем флаги *_есть в today_row для нужных моделей
                 row_copy = today_row.copy()
                 if model_name in ('flags_model', 'hybrid_model'):
                     for key in numeric_columns:
-                        flag_name = f"{key}_есть"
-                        if flag_name in feature_names:
-                            row_copy[flag_name] = 1 if row_copy.get(key, 0) > 0 else 0
+                        flag = f"{key}_есть"
+                        if flag in feature_names:
+                            row_copy[flag] = 1 if row_copy.get(key, 0) > 0 else 0
+
                 X_today = pd.DataFrame([{k: row_copy.get(k, 0) for k in feature_names}])
-                logger.debug(f"[{model_name}] X_today for target={target}: {X_today.to_dict(orient='records')}")
+                logger.debug(
+                    f"[{model_name}] X_today for {target}: {X_today.to_dict(orient='records')}")
                 pred = model.predict(X_today)[0]
                 predictions[target] = round(float(pred), 2)
                 logger.debug(f"[{model_name}] Predicted {target} = {predictions[target]}")
-            except Exception as e:
-                logger.debug(f"Prediction error for {target} in {model_name}: {e}")
+            except Exception as exc:
+                logger.debug(f"Prediction error for {target} in {model_name}: {exc}")
         all_results[model_name] = predictions
 
     return JsonResponse(all_results)
@@ -140,12 +148,11 @@ def predict_today(request):
 def update_value(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
-    logger.debug('update_value called with method POST')
+    logger.debug('update_value called (POST)')
     try:
         data = json.loads(request.body.decode('utf-8'))
         key = data.get('key')
         value = data.get('value')
-        logger.debug(f"update_value payload: key={key}, value={value}")
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
@@ -165,14 +172,15 @@ def update_value(request):
         EntryValue.objects.filter(entry=entry, parameter=param).delete()
         logger.debug(f"Deleted value for {key}")
         return JsonResponse({'status': 'deleted'})
-    else:
-        ev, created = EntryValue.objects.update_or_create(
-            entry=entry,
-            parameter=param,
-            defaults={'value': value}
-        )
-        logger.debug(f"Saved value for {key}: {value}")
-        return JsonResponse({'status': 'saved', 'value': ev.value})
+
+    ev, _created = EntryValue.objects.update_or_create(
+        entry=entry,
+        parameter=param,
+        defaults={'value': value}
+    )
+    logger.debug(f"Saved value for {key}: {value}")
+    return JsonResponse({'status': 'saved', 'value': ev.value})
+
 
 def entry_success(request):
     return render(request, 'diary/success.html')

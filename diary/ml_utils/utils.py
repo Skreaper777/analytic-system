@@ -1,49 +1,53 @@
-# diary/ml_utils/utils.py
+# ---------- diary/ml_utils/utils.py ----------
 import logging
-from typing import List, Dict
+from typing import Dict, List
 
 import pandas as pd
 
 from diary.models import Entry, EntryValue, Parameter
 
-logger = logging.getLogger("diary.ml_utils.utils")
+logger = logging.getLogger('diary.ml_utils.utils')
 
 
 def get_diary_dataframe() -> pd.DataFrame:
-    """Загружает все записи дневника в виде **pandas DataFrame**.
+    """Загружает все записи дневника в виде **pandas.DataFrame**.
 
-    *Строки* — это даты,
-    *столбцы* — **machine‑friendly** ключи параметров (``Parameter.key``),
-    *значения* — числовые (``float``).
+    * Строки* — даты (`Entry.date`).
+    * Столбцы* — machine‑friendly ключи параметров (`Parameter.key`).
+    * Значения* — числовые оценки пользователя.
 
-    Экспортирует *отладочную* копию в «debug_diary_dataframe.xlsx» 📊.
+    💡 **Отладка**: отдельно сохраняем копию DataFrame c *русскими названиями*
+    параметров (`Parameter.name_ru`) в `debug_diary_dataframe.xlsx`. Это не
+    влияет на работу ML‑части и остальных функций.
     """
 
-    # Получаем все активные параметры и строим карту id → key
+    entries = Entry.objects.all().order_by('date')
     parameters = Parameter.objects.filter(active=True)
+
     id_to_key: Dict[int, str] = {p.id: p.key for p in parameters}
 
-    # Выгружаем записи дневника, отсортированные по дате
-    entries = Entry.objects.all().order_by("date")
-
-    data: List[Dict[str, float]] = []
+    data: List[dict] = []
     for entry in entries:
-        row: Dict[str, float] = {"date": entry.date}
-
-        # Собираем значения параметров за конкретную дату
-        for ev in EntryValue.objects.filter(entry=entry):
+        row = {'date': entry.date}
+        values = EntryValue.objects.filter(entry=entry)
+        for ev in values:
             key = id_to_key.get(ev.parameter_id)
             if key:
                 row[key] = ev.value
         data.append(row)
 
-    # Преобразуем в DataFrame и заменяем пропуски на 0.0
+    # DataFrame с ключами — используется повсеместно
     df = pd.DataFrame(data).fillna(0.0)
 
-    # Логируем первые десять строк
-    logger.debug("🧞 DataFrame head used for training:\n%s", df.head(10).to_string())
+    logger.debug('🧞 DataFrame head (keys):\n%s', df.head(10).to_string())
 
-    # Сохраняем копию для ручной проверки
-    df.to_excel("debug_diary_dataframe.xlsx", index=False)
+    # ---- Excel‑вариант ----
+    key_to_name = {p.key: p.name_ru for p in parameters}
+    df_excel = df.rename(columns=key_to_name)
+    try:
+        df_excel.to_excel('debug_diary_dataframe.xlsx', index=False)
+        logger.debug('📝 debug_diary_dataframe.xlsx обновлён (%d строк)', len(df_excel))
+    except Exception as exc:
+        logger.warning('Не удалось сохранить debug_diary_dataframe.xlsx: %s', exc)
 
     return df
