@@ -1,0 +1,10 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools %}
+    <div style="margin-bottom: 10px;">
+        <a class="button" href="{% url 'admin:import_excel' %}" style="background-color: #28a745; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none;">
+            📥 Импорт Excel
+        </a>
+    </div>
+    {{ block.super }}
+{% endblock %}
