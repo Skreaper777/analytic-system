@@ -1,14 +1,10 @@
 # diary/views.py
-"""Вьюхи дневника.
+"""Вьюхи дневника (актуализированы).
 
-Файл содержит:
-• add_entry — страница с формой за день,
-• entry_success — редирект после сохранения,
-• update_value — AJAX сохранение одного параметра,
-• predict_today — AJAX прогноз ML.
-
-Контекст `add_entry` теперь передаёт `today_str`, чтобы шаблон
-`add_entry.html` корректно подставлял значение по умолчанию в <input type="date">.
+Контекст `add_entry` теперь содержит:
+• today_str  – ISO дата сегодня,
+• parameter_keys – список ключей активных параметров (для JS),
+• range_6 – range(6) для отрисовки кнопок 0‒5.
 """
 from __future__ import annotations
 
@@ -28,37 +24,29 @@ from .models import Entry, EntryValue, Parameter
 from .ml_utils.utils import get_diary_dataframe
 from .ml_utils import base_model
 
-# ---------------------------------------------------------------------------
-# Логирование
-# ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 file_handler = logging.FileHandler("diary.log", encoding="utf-8")
 file_handler.setFormatter(
-    logging.Formatter(
-        fmt="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%d/%b/%Y %H:%M:%S",
-    )
+    logging.Formatter("[%(asctime)s] [%(levelname)s] %(name)s: %(message)s", "%d/%b/%Y %H:%M:%S")
 )
 logger.addHandler(file_handler)
 
 # ---------------------------------------------------------------------------
-# Вспомогательные функции
+# Helpers
 # ---------------------------------------------------------------------------
 
 def _safe_float(value: Any) -> float:
-    """Строка/Any → float. Пустое или None трактуется как 0.0."""
     try:
         return float(value) if value not in ("", None) else 0.0
     except (TypeError, ValueError):
         return 0.0
 
 # ---------------------------------------------------------------------------
-# Основные страницы
+# Main page
 # ---------------------------------------------------------------------------
 
 def add_entry(request):
-    """Страница дневника за указанную дату (или сегодня)."""
     date_str = request.GET.get("date")
     try:
         entry_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
@@ -69,25 +57,31 @@ def add_entry(request):
     entry, _ = Entry.objects.get_or_create(date=entry_date)
     form = EntryForm(instance=entry)
 
+    # Список ключей активных параметров – для JS
+    parameter_keys = list(Parameter.objects.filter(active=True).values_list("key", flat=True))
+
     context = {
         "form": form,
         "entry": entry,
         "entry_date": entry_date.isoformat(),
-        "today_str": date.today().isoformat(),  # <— нужно шаблону для default value
+        "today_str": date.today().isoformat(),
+        "parameter_keys": parameter_keys,
+        "range_6": range(6),
     }
     return render(request, "diary/add_entry.html", context)
 
+# ---------------------------------------------------------------------------
+# Redirect after save
+# ---------------------------------------------------------------------------
 
 def entry_success(request):
-    """Redirect на главную после успешного сохранения формы."""
     return HttpResponseRedirect(reverse("diary:add_entry"))
 
 # ---------------------------------------------------------------------------
-# AJAX / REST endpoints
+# AJAX: update single value
 # ---------------------------------------------------------------------------
 
 def update_value(request):
-    """POST-AJAX: обновление единственного параметра в дневнике."""
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
@@ -100,19 +94,17 @@ def update_value(request):
         return JsonResponse({"error": str(exc)}, status=400)
 
     entry, _ = Entry.objects.get_or_create(date=day)
-    parameter = Parameter.objects.get(name=param_name)
-    EntryValue.objects.update_or_create(
-        entry=entry,
-        parameter=parameter,
-        defaults={"value": value},
-    )
-    logger.debug("update_value: %s = %s on %s", param_name, value, day)
+    parameter = Parameter.objects.get(key=param_name)
+    EntryValue.objects.update_or_create(entry=entry, parameter=parameter, defaults={"value": value})
+    logger.debug("update_value: %s=%s on %s", param_name, value, day)
     return JsonResponse({"status": "ok"})
 
+# ---------------------------------------------------------------------------
+# AJAX: predictions
+# ---------------------------------------------------------------------------
 
 @csrf_exempt
 def predict_today(request):
-    """POST-AJAX: прогноз всех числовых показателей на выбранный день."""
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
@@ -131,12 +123,9 @@ def predict_today(request):
         exclude = list(today_row.keys())
         if target in exclude:
             exclude.remove(target)
-
         model_info = base_model.train_model(df, target, exclude=exclude)
         model = model_info["model"]
         X_today = pd.DataFrame([{k: today_row.get(k, 0.0) for k in model.feature_names_in_}])
-        pred = model.predict(X_today)[0]
-        predictions[target] = round(float(pred), 2)
-        logger.debug("Predicted %s = %.2f", target, pred)
+        predictions[target] = round(float(model.predict(X_today)[0]), 2)
 
     return JsonResponse(predictions)
