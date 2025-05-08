@@ -1,11 +1,11 @@
 {% load tz %}
-{% now "Y-m-d" as today_str %}
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <title>Форма дневника состояния</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{ parameter_keys|json_script:"param-keys" }}
     <style>
         body { font-family: sans-serif; background-color: #f4f4f4; padding: 40px 20px; margin: 0; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
@@ -15,14 +15,14 @@
         .rating-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
         .rating-buttons button { flex: 1; padding: 10px; font-size: 0.9em; border: 2px solid #ccc; border-radius: 6px; background: white; cursor: pointer; transition: 0.2s ease; }
         .rating-buttons button.selected { background-color: #28a745; color: white; border-color: #1e7e34; }
-        .predicted { font-size: 0.85em; color: #666; margin-bottom: 20px; }
+        .predicted { font-size: 0.85em; color: #666; margin-bottom: 10px; }
         .predicted[data-color="green"] { color: #28a745; }
         .predicted[data-color="yellow"] { color: #e0a800; }
         .predicted[data-color="red"] { color: #dc3545; }
         textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
         button[type="submit"] { margin-top: 30px; padding: 15px; font-size: 1.2em; background-color: #28a745; color: white; border: none; border-radius: 10px; cursor: pointer; width: 100%; }
         button[type="submit"]:hover { background-color: #1e7e34; }
-        .field-group { margin-bottom: 20px; }
+        .field { margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -30,30 +30,24 @@
     <h2>📘 Дневник состояния</h2>
     <div class="date-selector">
         {% with request.GET.date|default:today_str as current_date %}
-            <input type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
+            <input id="date-input" type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
         {% endwith %}
     </div>
     <form method="post">
         {% csrf_token %}
-        <div class="field-group">
-            <label for="id_comment">Комментарий</label>
-            {{ form.comment }}
-        </div>
         {% for field in form %}
-            {% if field.name != 'comment' %}
-                <div class="field-group">
-                    <label>{{ field.label }}</label>
-                    <div class="rating-buttons" data-name="{{ field.name }}">
-                        {% for i in range_6 %}
-                            <button type="button" data-value="{{ i }}"
-                                    {% if field.value|stringformat:'s'|default:'' == i|stringformat:'s' %}class="selected"{% endif %}>
-                                {{ i }}
-                            </button>
-                        {% endfor %}
-                    </div>
-                    {{ field.as_hidden }}
-                    <div class="predicted" id="predicted-{{ field.name }}"></div>
+            {% if field.name == "comment" %}
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+            {% else %}
+                <label>{{ field.label }}</label>
+                <div class="rating-buttons" data-name="{{ field.name }}">
+                    {% for i in range_6 %}
+                        <button type="button" data-value="{{ i }}">{{ i }}</button>
+                    {% endfor %}
                 </div>
+                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
+                <div class="predicted" id="predicted-{{ field.name }}"></div>
             {% endif %}
         {% endfor %}
         <button type="submit">💾 Сохранить</button>
@@ -62,6 +56,8 @@
 
 <script>
 const predictUrl = "{% url 'predict_today' %}";
+const updateUrl = "{% url 'update_value' %}";
+const entryDate = "{{ today_str }}";
 
 function getCookie(name) {
     let cookieValue = null;
@@ -75,79 +71,95 @@ function getCookie(name) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-    console.log('DOM loaded, initializing diary form');
     const formValues = {};
-    // Initialize formValues and initial selection
-    document.querySelectorAll('.rating-buttons').forEach(group => {
-        const name = group.dataset.name;
-        const hiddenInput = document.querySelector(`input[name='${name}']`);
-        console.log(`Field group for '${name}', hiddenInput:`, hiddenInput);
-        if (hiddenInput && hiddenInput.value !== '') {
-            // original raw value (may be float)
-            const raw = hiddenInput.value;
-            // normalize to integer string for matching data-value
-            const norm = String(parseInt(parseFloat(raw), 10));
-            formValues[name] = raw;
-            console.log(`Initial raw for ${name}:`, raw, 'normalized:', norm);
-            const selBtn = group.querySelector(`button[data-value="${norm}"]`);
-            if (selBtn) {
-                selBtn.classList.add('selected');
-                console.log(`Applied initial selection for ${name}:`, norm);
-            }
+    const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
+
+    // Инициализация значений из скрытых полей
+    allKeys.forEach(name => {
+        const input = document.getElementById(`input-${name}`);
+        if (input && input.value !== "") {
+            formValues[name] = input.value;
         }
-        // click handlers
-        group.querySelectorAll('button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const value = btn.dataset.value;
-                const rawValue = value; // now integer string
-                hiddenInput.value = rawValue;
-                formValues[name] = rawValue;
-                console.log(`Button click for ${name}, set value:`, rawValue);
-                group.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                // save immediately
-                fetch("{% url 'update_value' %}?date={{ today_str }}", {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({ key: name, value: parseFloat(rawValue) })
-                }).then(res => res.json()).then(resp => console.log('Update response for', name, resp));
-                fetchPredictions();
-            });
-        });
     });
 
     function colorHint(diff) {
-        if (Math.abs(diff) < 1) return 'green';
-        if (Math.abs(diff) <= 2) return 'yellow';
-        return 'red';
+        if (Math.abs(diff) < 1) return "green";
+        if (Math.abs(diff) <= 2) return "yellow";
+        return "red";
     }
 
     function updatePredictions(data) {
-        console.log('updatePredictions called with:', data);
         Object.entries(data).forEach(([key, val]) => {
-            const inputEl = document.querySelector(`input[name='${key}']`);
-            const actual = parseFloat(inputEl ? inputEl.value : '0') || 0;
-            const diff = val - actual;
-            console.log(`Key: ${key}, predicted: ${val}, actual: ${actual}, diff: ${diff}`);
-            const div = document.getElementById(`predicted-${key}`);
-            if (div) {
-                div.textContent = `💡 Прогноз: ${val}`;
-                div.dataset.color = colorHint(diff);
+            const predDiv = document.getElementById("predicted-" + key);
+            if (predDiv) {
+                const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
+                const diff = val - inputVal;
+                predDiv.textContent = `💡 Прогноз: ${val}`;
+                predDiv.dataset.color = colorHint(diff);
             }
         });
     }
 
     function fetchPredictions() {
-        console.log('fetchPredictions sending', formValues);
         fetch(predictUrl, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie('csrftoken')
+            },
             body: JSON.stringify(formValues)
         })
-        .then(resp => resp.json().then(data => { console.log('fetchPredictions received:', data); return data; }))
-        .then(updatePredictions)
-        .catch(err => console.error('Prediction error:', err));
+        .then(resp => resp.json())
+        .then(data => updatePredictions(data))
+        .catch(err => console.warn("Prediction error:", err));
     }
 
-    // initial load
+    document.querySelectorAll('.rating-buttons').forEach(group => {
+        const name = group.dataset.name;
+        const hiddenInput = document.getElementById(`input-${name}`);
+        const buttons = group.querySelectorAll('button');
+
+        // Отметить выбранную кнопку при загрузке
+        buttons.forEach(btn => {
+            if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
+                btn.classList.add('selected');
+            }
+        });
+
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isActive = btn.classList.contains('selected');
+                let valueToSend;
+
+                if (isActive) {
+                    hiddenInput.value = '';
+                    delete formValues[name];
+                    buttons.forEach(b => b.classList.remove('selected'));
+                    valueToSend = null;
+                } else {
+                    const val = btn.dataset.value;
+                    hiddenInput.value = val;
+                    formValues[name] = val;
+                    buttons.forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    valueToSend = parseFloat(val);
+                }
+
+                fetchPredictions();
+                // Сохраняем изменение сразу с корректной датой
+                fetch(`${updateUrl}?date=${entryDate}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ key: name, value: valueToSend })
+                });
+            });
+        });
+    });
+
+    // Первая загрузка прогноза
     fetchPredictions();
 });
 </script>
