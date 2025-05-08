@@ -15,10 +15,11 @@
         .rating-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
         .rating-buttons button { flex: 1; padding: 10px; font-size: 0.9em; border: 2px solid #ccc; border-radius: 6px; background: white; cursor: pointer; transition: 0.2s ease; }
         .rating-buttons button.selected { background-color: #28a745; color: white; border-color: #1e7e34; }
-        .predicted { font-size: 0.85em; color: #666; margin-bottom: 10px; }
+        .predicted { font-size: 0.85em; color: #666; margin-bottom: 4px; }
         .predicted[data-color="green"] { color: #28a745; }
         .predicted[data-color="yellow"] { color: #e0a800; }
         .predicted[data-color="red"] { color: #dc3545; }
+        .predicted-secondary { font-size: 0.75em; color: #888; margin-bottom: 10px; }
         textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
         button[type="submit"] { margin-top: 30px; padding: 15px; font-size: 1.2em; background-color: #28a745; color: white; border: none; border-radius: 10px; cursor: pointer; width: 100%; }
         button[type="submit"]:hover { background-color: #1e7e34; }
@@ -48,6 +49,7 @@
                 </div>
                 <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
                 <div class="predicted" id="predicted-{{ field.name }}"></div>
+                <div class="predicted-secondary" id="predicted-alt-{{ field.name }}"></div>
             {% endif %}
         {% endfor %}
         <button type="submit">💾 Сохранить</button>
@@ -56,6 +58,7 @@
 
 <script>
 const predictUrl = "{% url 'predict_today' %}";
+const altPredictUrl = predictUrl + "?model=flags";
 const updateUrl = "{% url 'update_value' %}";
 const entryDate = "{{ today_str }}";
 
@@ -74,7 +77,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const formValues = {};
     const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
 
-    // Инициализация значений из скрытых полей
     allKeys.forEach(name => {
         const input = document.getElementById(`input-${name}`);
         if (input && input.value !== "") {
@@ -88,14 +90,17 @@ document.addEventListener("DOMContentLoaded", function () {
         return "red";
     }
 
-    function updatePredictions(data) {
+    function updatePredictions(data, isAlt = false) {
         Object.entries(data).forEach(([key, val]) => {
-            const predDiv = document.getElementById("predicted-" + key);
+            const predDiv = document.getElementById((isAlt ? "predicted-alt-" : "predicted-") + key);
             if (predDiv) {
                 const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
                 const diff = val - inputVal;
-                predDiv.textContent = `💡 Прогноз: ${val}`;
-                predDiv.dataset.color = colorHint(diff);
+                const label = isAlt ? "🔄 Альт-прогноз:" : "💡 Прогноз:";
+                predDiv.textContent = `${label} ${val}`;
+                if (!isAlt) {
+                    predDiv.dataset.color = colorHint(diff);
+                }
             }
         });
     }
@@ -110,8 +115,20 @@ document.addEventListener("DOMContentLoaded", function () {
             body: JSON.stringify(formValues)
         })
         .then(resp => resp.json())
-        .then(data => updatePredictions(data))
+        .then(data => updatePredictions(data, false))
         .catch(err => console.warn("Prediction error:", err));
+
+        fetch(altPredictUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie('csrftoken')
+            },
+            body: JSON.stringify(formValues)
+        })
+        .then(resp => resp.json())
+        .then(data => updatePredictions(data, true))
+        .catch(err => console.warn("Alt prediction error:", err));
     }
 
     document.querySelectorAll('.rating-buttons').forEach(group => {
@@ -119,7 +136,6 @@ document.addEventListener("DOMContentLoaded", function () {
         const hiddenInput = document.getElementById(`input-${name}`);
         const buttons = group.querySelectorAll('button');
 
-        // Отметить выбранную кнопку при загрузке
         buttons.forEach(btn => {
             if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
                 btn.classList.add('selected');
@@ -146,7 +162,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
 
                 fetchPredictions();
-                // Сохраняем изменение сразу с корректной датой
                 fetch(`${updateUrl}?date=${entryDate}`, {
                     method: "POST",
                     headers: {
@@ -159,7 +174,6 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    // Первая загрузка прогноза
     fetchPredictions();
 });
 </script>

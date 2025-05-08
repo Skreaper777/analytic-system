@@ -9,16 +9,15 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .forms import EntryForm
 from .models import Entry, EntryValue, Parameter
-from .ml_utils import get_diary_dataframe, train_model
+from .ml_utils.utils import get_diary_dataframe
+from .ml_utils import base_model, flags_model
 
-# Настройка логирования в файл с читаемым форматом времени
 logger = logging.getLogger('diary.views')
 logger.setLevel(logging.DEBUG)
 file_handler = logging.FileHandler('diary.log', encoding='utf-8')
 formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(funcName)s] %(message)s', datefmt='%d/%b/%Y %H:%M:%S')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
-
 
 def add_entry(request):
     date_str = request.GET.get('date')
@@ -88,32 +87,46 @@ def predict_today(request):
     except Exception as e:
         return JsonResponse({'error': f'Data error: {str(e)}'}, status=500)
 
-    # Собираем только числовые параметры
-    today_row = {}
-    for k, v in user_input.items():
-        if v != '':
-            try:
-                today_row[k] = float(v)
-            except (TypeError, ValueError):
-                logger.debug(f"Non-numeric value for {k}: {v}")
-
-    logger.debug(f"Clean today_row: {today_row}")
     result = {}
+    numeric_columns = [col for col in df.columns if col not in ('date',)]
+    today_row = {}
 
-    for target in df.columns:
-        # всегда считаем прогноз, кроме колонки даты
-        if target == 'date':
-            continue
+    for col in numeric_columns:
+        val = user_input.get(col)
         try:
-            model_info = train_model(df, target, exclude=list(today_row.keys()))
+            today_row[col] = float(val) if val != '' and val is not None else 0.0
+        except (TypeError, ValueError):
+            today_row[col] = 0.0
+
+    logger.debug(f"Final today_row with zero fill: {today_row}")
+
+    model_key = request.GET.get("model", "base")
+    train_model = {
+        "base": base_model.train_model,
+        "flags": flags_model.train_model
+    }.get(model_key, base_model.train_model)
+
+    for target in numeric_columns:
+        try:
+            exclude = [col for col in df.columns if col not in today_row or col == 'date' or col == target]
+            model_info = train_model(df, target, exclude=exclude)
             model = model_info['model']
             feature_names = list(model.feature_names_in_)
-            X_today = pd.DataFrame([today_row], columns=feature_names).fillna(0)
+
+            # Добавляем флаги *_есть в today_row для модели flags
+            if model_key == 'flags':
+                for key in numeric_columns:
+                    flag_name = f"{key}_есть"
+                    if flag_name in feature_names:
+                        today_row[flag_name] = 1 if today_row.get(key, 0) > 0 else 0
+
+            X_today = pd.DataFrame([{k: today_row.get(k, 0) for k in feature_names}])
             pred = model.predict(X_today)[0]
             result[target] = round(float(pred), 2)
             logger.debug(f"Predicted {target} = {result[target]}")
         except Exception as e:
             logger.debug(f"Prediction error for {target}: {e}")
+
     return JsonResponse(result)
 
 
@@ -154,7 +167,6 @@ def update_value(request):
         )
         logger.debug(f"Saved value for {key}: {value}")
         return JsonResponse({'status': 'saved', 'value': ev.value})
-
 
 def entry_success(request):
     return render(request, 'diary/success.html')
