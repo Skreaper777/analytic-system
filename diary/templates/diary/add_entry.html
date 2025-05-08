@@ -13,10 +13,16 @@
         .date-selector { text-align: center; margin-bottom: 20px; }
         .date-selector input[type="date"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
 
-        /* ---- ПАРАМЕТРЫ ---- */
-        .rating-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        /* rating buttons layout */
+        .rating-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 5px; /* keep small gap between row and label */
+        }
+        /* compact square buttons, no stretching */
         .rating-buttons button {
-            width: 2.5rem;   /* половина прежнего размера */
+            width: 2.5rem;   /* 50% of previous ~5rem */
             height: 2.5rem;
             padding: 0;
             font-size: 0.9em;
@@ -25,22 +31,37 @@
             background: white;
             cursor: pointer;
             transition: 0.2s ease;
-            flex: 0 0 auto; /* не растягивать */
+            flex: 0 0 auto;  /* no grow, no shrink */
             display: inline-flex;
             justify-content: center;
             align-items: center;
         }
-        .rating-buttons button.selected { background-color: #28a745; color: white; border-color: #1e7e34; }
+        .rating-buttons button.selected {
+            background-color: #28a745;
+            color: white;
+            border-color: #1e7e34;
+        }
 
+        /* prediction hints */
         .predicted { font-size: 0.85em; color: #666; margin-bottom: 4px; }
         .predicted[data-color="green"]  { color: #28a745; }
         .predicted[data-color="yellow"] { color: #e0a800; }
         .predicted[data-color="red"]    { color: #dc3545; }
-        .predicted-secondary { font-size: 0.75em; color: #888; margin-bottom: 20px; }
+        .predicted-secondary { font-size: 0.75em; color: #888; margin-bottom: 20px; } /* 2× прежнего 10px */
 
-        /* ---- Прочее ---- */
+        /* comment textarea & submit */
         textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #ccc; border-radius: 8px; resize: vertical; }
-        button[type="submit"] { margin-top: 30px; padding: 15px; font-size: 1.2em; background-color: #28a745; color: white; border: none; border-radius: 10px; cursor: pointer; width: 100%; }
+        button[type="submit"] {
+            margin-top: 30px;
+            padding: 15px;
+            font-size: 1.2em;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+        }
         button[type="submit"]:hover { background-color: #1e7e34; }
     </style>
 </head>
@@ -89,6 +110,8 @@ function getCookie(name) {
     }
     return cookieValue;
 }
+
+// -------------- UI & PREDICTION LOGIC -------------------
 
 document.addEventListener("DOMContentLoaded", function () {
     const formValues = {};
@@ -148,12 +171,14 @@ document.addEventListener("DOMContentLoaded", function () {
         const hiddenInput = document.getElementById(`input-${name}`);
         const buttons = group.querySelectorAll('button');
 
+        // Mark selected button on load
         buttons.forEach(btn => {
             if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
                 btn.classList.add('selected');
             }
         });
 
+        // Click handler
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const isActive = btn.classList.contains('selected');
@@ -186,6 +211,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
+    // First prediction on page load
     fetchPredictions();
 });
 </script>

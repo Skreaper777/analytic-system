@@ -22,6 +22,12 @@ logger.addHandler(file_handler)
 
 
 def add_entry(request):
+    """Страница ввода/просмотра дневника за выбранную дату.
+
+    * ВАЖНО*: не создавать *EntryValue* с нулевыми значениями автоматически.
+    Значения параметров рождаются **только** когда пользователь явно кликает кнопку
+    оценки *или* нажимает «Сохранить» после реального ввода.
+    """
     date_str = request.GET.get('date')
     try:
         entry_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
@@ -30,14 +36,15 @@ def add_entry(request):
         logger.debug(f"Invalid date format '{date_str}', falling back to today")
 
     logger.debug(f"Entry date: {entry_date}")
+    # создаём/получаем саму запись без параметров
     entry, created = Entry.objects.get_or_create(date=entry_date)
     logger.debug(f"Entry fetched: id={entry.id}, created={created}, comment='{entry.comment}'")
 
+    # --- Подготавливаем форму ---
     initial_data = {'comment': entry.comment}
     for ev in EntryValue.objects.filter(entry=entry):
         initial_data[ev.parameter.key] = ev.value
-        logger.debug(f"Pre-fill {ev.parameter.key} = {ev.value}")
-
+        logger.debug(f"Pre‑fill {ev.parameter.key} = {ev.value}")
     logger.debug(f"Complete initial_data: {initial_data}")
 
     if request.method == 'POST':
@@ -46,18 +53,16 @@ def add_entry(request):
         if form.is_valid():
             entry.comment = form.cleaned_data['comment']
             entry.save()
-            for param in Parameter.objects.filter(active=True):
-                # Save only the parameters user actually interacted with
-                if param.key not in request.POST:
-                    continue
 
+            # 👇 сохраняем ТОЛЬКО реально введённые числовые значения
+            active_params = Parameter.objects.filter(active=True)
+            for param in active_params:
                 val = form.cleaned_data.get(param.key)
-
-                # If cleared — delete
+                # игнорируем пустые поля – ничего не сохраняем и ничего не затираем нулями
                 if val in (None, ''):
+                    # если раньше значение было сохранено, удалить его
                     EntryValue.objects.filter(entry=entry, parameter=param).delete()
                     continue
-
                 EntryValue.objects.update_or_create(
                     entry=entry,
                     parameter=param,
@@ -98,47 +103,50 @@ def predict_today(request):
     except Exception as e:
         return JsonResponse({'error': f'Data error: {str(e)}'}, status=500)
 
-    numeric_columns = [col for col in df.columns if col != 'date']
+    result = {}
+    numeric_columns = [col for col in df.columns if col not in ('date',)]
     today_row = {}
+
     for col in numeric_columns:
         val = user_input.get(col)
         try:
-            today_row[col] = float(val) if val not in ('', None) else 0.0
+            today_row[col] = float(val) if val != '' and val is not None else 0.0
         except (TypeError, ValueError):
             today_row[col] = 0.0
+
     logger.debug(f"Final today_row with zero fill: {today_row}")
 
     model_map = {
-        'base_model': base_model.train_model,
-        'flags_model': flags_model.train_model,
-        'hybrid_model': hybrid_model.train_model,
+        "base_model": base_model.train_model,
+        "flags_model": flags_model.train_model,
+        "hybrid_model": hybrid_model.train_model
     }
 
     all_results = {}
+
     for model_name, model_func in model_map.items():
         predictions = {}
         for target in numeric_columns:
             try:
-                exclude = [col for col in df.columns if col not in today_row or col in ('date', target)]
+                exclude = [col for col in df.columns if col not in today_row or col == 'date' or col == target]
                 model_info = model_func(df, target, exclude=exclude)
                 model = model_info['model']
                 feature_names = list(model.feature_names_in_)
 
+                # Добавляем флаги *_есть в today_row для нужных моделей
                 row_copy = today_row.copy()
                 if model_name in ('flags_model', 'hybrid_model'):
                     for key in numeric_columns:
-                        flag = f"{key}_есть"
-                        if flag in feature_names:
-                            row_copy[flag] = 1 if row_copy.get(key, 0) > 0 else 0
-
+                        flag_name = f"{key}_есть"
+                        if flag_name in feature_names:
+                            row_copy[flag_name] = 1 if row_copy.get(key, 0) > 0 else 0
                 X_today = pd.DataFrame([{k: row_copy.get(k, 0) for k in feature_names}])
-                logger.debug(
-                    f"[{model_name}] X_today for {target}: {X_today.to_dict(orient='records')}")
+                logger.debug(f"[{model_name}] X_today for target={target}: {X_today.to_dict(orient='records')}")
                 pred = model.predict(X_today)[0]
                 predictions[target] = round(float(pred), 2)
                 logger.debug(f"[{model_name}] Predicted {target} = {predictions[target]}")
-            except Exception as exc:
-                logger.debug(f"Prediction error for {target} in {model_name}: {exc}")
+            except Exception as e:
+                logger.debug(f"Prediction error for {target} in {model_name}: {e}")
         all_results[model_name] = predictions
 
     return JsonResponse(all_results)
@@ -148,11 +156,12 @@ def predict_today(request):
 def update_value(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
-    logger.debug('update_value called (POST)')
+    logger.debug('update_value called with method POST')
     try:
         data = json.loads(request.body.decode('utf-8'))
         key = data.get('key')
         value = data.get('value')
+        logger.debug(f"update_value payload: key={key}, value={value}")
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
@@ -172,15 +181,14 @@ def update_value(request):
         EntryValue.objects.filter(entry=entry, parameter=param).delete()
         logger.debug(f"Deleted value for {key}")
         return JsonResponse({'status': 'deleted'})
-
-    ev, _created = EntryValue.objects.update_or_create(
-        entry=entry,
-        parameter=param,
-        defaults={'value': value}
-    )
-    logger.debug(f"Saved value for {key}: {value}")
-    return JsonResponse({'status': 'saved', 'value': ev.value})
-
+    else:
+        ev, created = EntryValue.objects.update_or_create(
+            entry=entry,
+            parameter=param,
+            defaults={'value': value}
+        )
+        logger.debug(f"Saved value for {key}: {value}")
+        return JsonResponse({'status': 'saved', 'value': ev.value})
 
 def entry_success(request):
     return render(request, 'diary/success.html')
