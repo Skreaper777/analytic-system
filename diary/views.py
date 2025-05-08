@@ -15,16 +15,12 @@ from .ml_utils import get_diary_dataframe, train_model
 logger = logging.getLogger('diary.views')
 logger.setLevel(logging.DEBUG)
 file_handler = logging.FileHandler('diary.log', encoding='utf-8')
-formatter = logging.Formatter(
-    '[%(asctime)s] [%(name)s] [%(funcName)s] %(message)s',
-    datefmt='%d/%b/%Y %H:%M:%S'
-)
+formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(funcName)s] %(message)s', datefmt='%d/%b/%Y %H:%M:%S')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
 
 def add_entry(request):
-    # Определяем дату записи
     date_str = request.GET.get('date')
     try:
         entry_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
@@ -36,7 +32,6 @@ def add_entry(request):
     entry, created = Entry.objects.get_or_create(date=entry_date)
     logger.debug(f"Entry fetched: id={entry.id}, created={created}, comment='{entry.comment}'")
 
-    # Собираем начальные данные для формы
     initial_data = {'comment': entry.comment}
     for ev in EntryValue.objects.filter(entry=entry):
         initial_data[ev.parameter.key] = ev.value
@@ -44,18 +39,14 @@ def add_entry(request):
 
     logger.debug(f"Complete initial_data: {initial_data}")
 
-    # Обработка отправки формы
     if request.method == 'POST':
         logger.debug(f"POST data: {dict(request.POST)}")
         form = EntryForm(request.POST)
-        logger.debug(f"Form created for POST with fields: {[field.name for field in form]}")
         if form.is_valid():
             entry.comment = form.cleaned_data['comment']
             entry.save()
-            # Сохраняем все параметры
             for param in Parameter.objects.filter(active=True):
                 val = form.cleaned_data.get(param.key)
-                logger.debug(f"Saving param {param.key}: {val}")
                 if val is not None:
                     EntryValue.objects.update_or_create(
                         entry=entry,
@@ -67,21 +58,15 @@ def add_entry(request):
             logger.debug(f"Form errors: {form.errors}")
     else:
         form = EntryForm(initial=initial_data)
-        logger.debug(f"Form created for GET with initial data fields: {[field.name for field in form]}")
-        # Подключаем debug всех значений формы
-        for field in form:
-            logger.debug(f"Field {field.name} initial value: {field.value()}")
         logger.debug("Rendering form with initial data.")
 
-    # Передаем initial_data в контекст для шаблона
     context = {
         'form': form,
-        'initial_data': initial_data,
         'range_6': range(6),
         'today_str': entry_date.strftime('%Y-%m-%d'),
         'parameter_keys': [p.key for p in Parameter.objects.filter(active=True)]
     }
-    logger.debug(f"Context prepared: {context}")
+    logger.debug(f"Context prepared: date={context['today_str']}")
     return render(request, 'diary/add_entry.html', context)
 
 
@@ -91,10 +76,9 @@ def predict_today(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
 
-    # Парсим JSON с данными пользователя
     try:
-        data = request.body.decode('utf-8')
-        user_input = json.loads(data)
+        body = request.body.decode('utf-8')
+        user_input = json.loads(body)
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
@@ -102,10 +86,9 @@ def predict_today(request):
     try:
         df = get_diary_dataframe()
     except Exception as e:
-        logger.debug(f"Error loading DataFrame: {e}")
-        return JsonResponse({'error': f'Data error: {e}'}, status=500)
+        return JsonResponse({'error': f'Data error: {str(e)}'}, status=500)
 
-    # Оставляем только численные значения
+    # Собираем только числовые параметры
     today_row = {}
     for k, v in user_input.items():
         if v != '':
@@ -113,14 +96,14 @@ def predict_today(request):
                 today_row[k] = float(v)
             except (TypeError, ValueError):
                 logger.debug(f"Non-numeric value for {k}: {v}")
-    logger.debug(f"Clean today_row: {today_row}")
 
+    logger.debug(f"Clean today_row: {today_row}")
     result = {}
-    # Строим прогноз для каждого параметра
+
     for target in df.columns:
-        if target == 'date' or target in today_row:
+        # всегда считаем прогноз, кроме колонки даты
+        if target == 'date':
             continue
-        logger.debug(f"Training model for target: {target}")
         try:
             model_info = train_model(df, target, exclude=list(today_row.keys()))
             model = model_info['model']
@@ -131,24 +114,22 @@ def predict_today(request):
             logger.debug(f"Predicted {target} = {result[target]}")
         except Exception as e:
             logger.debug(f"Prediction error for {target}: {e}")
-    logger.debug(f"Returning prediction result: {result}")
     return JsonResponse(result)
 
 
 @csrf_exempt
 def update_value(request):
-    logger.debug(f"update_value called with method {request.method}")
     if request.method != 'POST':
         return JsonResponse({'error': 'POST only'}, status=405)
+    logger.debug('update_value called with method POST')
     try:
-        payload = json.loads(request.body.decode('utf-8'))
-        key = payload.get('key')
-        value = payload.get('value')
+        data = json.loads(request.body.decode('utf-8'))
+        key = data.get('key')
+        value = data.get('value')
+        logger.debug(f"update_value payload: key={key}, value={value}")
     except json.JSONDecodeError:
-        logger.debug("Invalid JSON in update_value")
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    logger.debug(f"update_value payload: key={key}, value={value}")
     date_str = request.GET.get('date')
     try:
         entry_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
@@ -165,13 +146,14 @@ def update_value(request):
         EntryValue.objects.filter(entry=entry, parameter=param).delete()
         logger.debug(f"Deleted value for {key}")
         return JsonResponse({'status': 'deleted'})
-    ev, created = EntryValue.objects.update_or_create(
-        entry=entry,
-        parameter=param,
-        defaults={'value': value}
-    )
-    logger.debug(f"Saved value for {key}: {ev.value}")
-    return JsonResponse({'status': 'saved', 'value': ev.value})
+    else:
+        ev, created = EntryValue.objects.update_or_create(
+            entry=entry,
+            parameter=param,
+            defaults={'value': value}
+        )
+        logger.debug(f"Saved value for {key}: {value}")
+        return JsonResponse({'status': 'saved', 'value': ev.value})
 
 
 def entry_success(request):
