@@ -112,8 +112,10 @@ def predict_today(request):
         df = get_diary_dataframe().copy()
         numeric_columns = [c for c in df.columns if c not in ("date",)]
 
+        # rus_name → key
         name_to_key = {p.name_ru: p.key for p in Parameter.objects.filter(active=True)}
 
+        # today_row строим по столбцам df (русские названия)
         today_row = {
             col: _safe_float(user_input.get(name_to_key.get(col, col), 0.0))
             for col in numeric_columns
@@ -121,7 +123,11 @@ def predict_today(request):
 
         predictions: dict[str, float] = {}
         for target in numeric_columns:
-            exclude = [c for c in numeric_columns if c != target]
+            # Исключаем только признаки, введённые сегодня (утечка), а не все остальные столбцы
+            exclude = list(today_row.keys())
+            if target in exclude:
+                exclude.remove(target)
+
             model_info = base_model.train_model(df, target, exclude=exclude)
             model = model_info["model"]
             features = model_info.get("features", getattr(model, "feature_names_in_", []))
