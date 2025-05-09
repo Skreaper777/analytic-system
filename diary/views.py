@@ -1,5 +1,5 @@
 # diary/views.py
-"""Вьюхи дневника – актуальная версия с рабочими прогнозами и логами."""
+"""Вьюхи дневника – исправлена логика exclude, чтобы /predict/ не падал."""
 from __future__ import annotations
 
 import json
@@ -27,7 +27,7 @@ file_handler.setFormatter(
 logger.addHandler(file_handler)
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helper
 # ---------------------------------------------------------------------------
 
 def _safe_float(value: Any) -> float:
@@ -37,7 +37,7 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 # ---------------------------------------------------------------------------
-# Main page
+# Pages
 # ---------------------------------------------------------------------------
 
 def add_entry(request):
@@ -63,15 +63,12 @@ def add_entry(request):
     }
     return render(request, "diary/add_entry.html", context)
 
-# ---------------------------------------------------------------------------
-# Redirect after save
-# ---------------------------------------------------------------------------
 
 def entry_success(request):
     return HttpResponseRedirect(reverse("diary:add_entry"))
 
 # ---------------------------------------------------------------------------
-# AJAX: update single value
+# AJAX endpoints
 # ---------------------------------------------------------------------------
 
 def update_value(request):
@@ -93,13 +90,9 @@ def update_value(request):
     logger.debug("update_value: %s=%s on %s", param_key, value, day)
     return JsonResponse({"status": "ok"})
 
-# ---------------------------------------------------------------------------
-# AJAX: predictions
-# ---------------------------------------------------------------------------
 
 @csrf_exempt
 def predict_today(request):
-    """POST‑JSON → прогнозы {param_key: value}."""
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
@@ -112,27 +105,29 @@ def predict_today(request):
         df = get_diary_dataframe().copy()
         numeric_columns = [c for c in df.columns if c not in ("date",)]
 
-        # rus_name → key
+        # rus_name → key map
         name_to_key = {p.name_ru: p.key for p in Parameter.objects.filter(active=True)}
+        key_to_rus = {v: k for k, v in name_to_key.items()}
 
-        # today_row строим по столбцам df (русские названия)
-        today_row = {
-            col: _safe_float(user_input.get(name_to_key.get(col, col), 0.0))
-            for col in numeric_columns
-        }
+        # Составляем today_row и список реально введённых признаков
+        today_row: dict[str, float] = {}
+        provided_rus: set[str] = set()
+        for rus in numeric_columns:
+            key = name_to_key.get(rus, rus)
+            val = _safe_float(user_input.get(key)) if key in user_input else 0.0
+            today_row[rus] = val
+            if key in user_input and user_input[key] not in (None, ""):
+                provided_rus.add(rus)
 
         predictions: dict[str, float] = {}
         for target in numeric_columns:
-            # Исключаем только признаки, введённые сегодня (утечка), а не все остальные столбцы
-            exclude = list(today_row.keys())
-            if target in exclude:
-                exclude.remove(target)
-
+            exclude = list(provided_rus - {target})  # исключаем только введённые, кроме цели
             model_info = base_model.train_model(df, target, exclude=exclude)
             model = model_info["model"]
             features = model_info.get("features", getattr(model, "feature_names_in_", []))
             X_today = pd.DataFrame([{f: today_row.get(f, 0.0) for f in features}])
-            predictions[name_to_key.get(target, target)] = round(float(model.predict(X_today)[0]), 2)
+            pred_val = round(float(model.predict(X_today)[0]), 2)
+            predictions[name_to_key.get(target, target)] = pred_val
 
         logger.debug("predict_today → %s", predictions)
         return JsonResponse(predictions)
