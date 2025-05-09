@@ -65,5 +65,10 @@ def get_diary_dataframe() -> pd.DataFrame:
 
     # --- Лог и возврат «machine»‑варианта ---
     logger.debug("🧞 DataFrame head used for training:\n%s", df_keys.head(10).to_string())
+    for h in logger.handlers:
+        try:
+            h.flush()
+        except Exception:
+            pass
 
     return df_keys.fillna(0.0)

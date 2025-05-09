@@ -124,15 +124,30 @@ def predict_today(request):
                 features = model_info.get("features", getattr(model, "feature_names_in_", []))
                 if not features:
                     logger.warning("Skipped prediction for %s — no features left after exclude", target)
+                    for h in logger.handlers:
+                        try:
+                            h.flush()
+                        except Exception:
+                            pass
                     continue
                 X_today = pd.DataFrame([{f: today_row.get(f, 0.0) for f in features}])
                 pred_val = round(float(model.predict(X_today)[0]), 2)
                 predictions[name_to_key.get(target, target)] = pred_val
             except Exception as e:
                 logger.exception("Model training failed for %s", target)
+                for h in logger.handlers:
+                    try:
+                        h.flush()
+                    except Exception:
+                        pass
                 continue
 
         logger.debug("predict_today → %s", predictions)
+        for h in logger.handlers:
+            try:
+                h.flush()
+            except Exception:
+                pass
         return JsonResponse(predictions)
 
     except Exception as exc:
