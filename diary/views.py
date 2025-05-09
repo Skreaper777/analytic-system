@@ -110,17 +110,14 @@ def predict_today(request):
         key_to_rus = {v: k for k, v in name_to_key.items()}
 
         today_row: dict[str, float] = {}
-        provided_rus: set[str] = set()
         for rus in numeric_columns:
             key = name_to_key.get(rus, rus)
             val = _safe_float(user_input.get(key)) if key in user_input else 0.0
             today_row[rus] = val
-            if key in user_input and user_input[key] not in (None, ""):
-                provided_rus.add(rus)
 
         predictions: dict[str, float] = {}
         for target in numeric_columns:
-            exclude = list(provided_rus - {target})
+            exclude = [target]  # ❗️Возвращено поведение старой версии
             try:
                 model_info = base_model.train_model(df, target, exclude=exclude)
                 model = model_info["model"]
