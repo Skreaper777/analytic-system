@@ -1,10 +1,5 @@
 # diary/views.py
-"""Вьюхи дневника – актуальная версия.
-
-Главное изменение: эндпоинт `predict_today` теперь возвращает
-прогнозы с **machine-key** в качестве ключей, чтобы их можно было
-надёжно сопоставить с id элементов в шаблоне (div#predicted-<key>).
-"""
+"""Вьюхи дневника – актуальная версия с рабочими прогнозами и логами."""
 from __future__ import annotations
 
 import json
@@ -89,6 +84,7 @@ def update_value(request):
         value = _safe_float(data["value"])
         day = datetime.strptime(data["date"], "%Y-%m-%d").date()
     except (KeyError, ValueError, json.JSONDecodeError) as exc:
+        logger.exception("update_value bad payload")
         return JsonResponse({"error": str(exc)}, status=400)
 
     entry, _ = Entry.objects.get_or_create(date=day)
@@ -103,7 +99,7 @@ def update_value(request):
 
 @csrf_exempt
 def predict_today(request):
-    """Возвращает прогнозы {param_key: value} для всех числовых колонок."""
+    """POST‑JSON → прогнозы {param_key: value}."""
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
@@ -112,24 +108,29 @@ def predict_today(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    df = get_diary_dataframe().copy()
-    numeric_columns = [c for c in df.columns if c not in ("date",)]
+    try:
+        df = get_diary_dataframe().copy()
+        numeric_columns = [c for c in df.columns if c not in ("date",)]
 
-    # Карта «rus name» → "key"
-    name_to_key = {p.name_ru: p.key for p in Parameter.objects.filter(active=True)}
+        name_to_key = {p.name_ru: p.key for p in Parameter.objects.filter(active=True)}
 
-    # today_row формируем по колонкам из df (русские названия), lookup в user_input по key
-    today_row = {col: _safe_float(user_input.get(name_to_key.get(col, col), 0.0)) for col in numeric_columns}
+        today_row = {
+            col: _safe_float(user_input.get(name_to_key.get(col, col), 0.0))
+            for col in numeric_columns
+        }
 
-    result: dict[str, float] = {}
-    for target in numeric_columns:
-        exclude = list(today_row.keys())
-        exclude.remove(target) if target in exclude else None
+        predictions: dict[str, float] = {}
+        for target in numeric_columns:
+            exclude = [c for c in numeric_columns if c != target]
+            model_info = base_model.train_model(df, target, exclude=exclude)
+            model = model_info["model"]
+            features = model_info.get("features", getattr(model, "feature_names_in_", []))
+            X_today = pd.DataFrame([{f: today_row.get(f, 0.0) for f in features}])
+            predictions[name_to_key.get(target, target)] = round(float(model.predict(X_today)[0]), 2)
 
-        model_info = base_model.train_model(df, target, exclude=exclude)
-        model = model_info["model"]
-        X_today = pd.DataFrame([{k: today_row.get(k, 0.0) for k in model.feature_names_in_}])
-        pred_val = round(float(model.predict(X_today)[0]), 2)
-        result[name_to_key.get(target, target)] = pred_val  # ключ = machine-key
+        logger.debug("predict_today → %s", predictions)
+        return JsonResponse(predictions)
 
-    return JsonResponse(result)
+    except Exception as exc:
+        logger.exception("predict_today failed")
+        return JsonResponse({"error": str(exc)}, status=500)
