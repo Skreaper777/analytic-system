@@ -13,10 +13,9 @@ from typing import List
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("predict")  # было __name__ — заменено на predict
 
 DROP_ALWAYS: List[str] = ["date", "Дата"]
-
 
 def train_model(
     df: pd.DataFrame,
@@ -33,10 +32,13 @@ def train_model(
 
     logger.debug("train_model: target=%s, X_shape=%s, exclude=%s", target, X.shape, exclude)
 
+    if X.shape[1] == 0:
+        logger.warning("train_model: Пропущено обучение для '%s' — нет признаков (X пуст)", target)
+        return {"model": None, "features": []}
+
     model = LinearRegression()
     model.fit(X, y)
 
     logger.debug("trained %s: intercept=%.3f", target, model.intercept_)
 
-    # Возвращаем и порядок колонок, если feature_names_in_ нет (старый sklearn)
     return {"model": model, "features": X.columns.tolist()}

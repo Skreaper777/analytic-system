@@ -1,4 +1,4 @@
-# ---------- diary/ml_utils/utils.py ----------
+# diary/ml_utils/utils.py
 """Utility helpers for ML data preparation.
 
 * Экспортирует «сырые» данные в Excel с человеческими названиями столбцов
@@ -55,6 +55,10 @@ def get_diary_dataframe() -> pd.DataFrame:
     # --- DataFrames ---
     df_keys: pd.DataFrame = pd.DataFrame(rows_keys)
     df_names: pd.DataFrame = pd.DataFrame(rows_names)
+
+    # --- Удаляем полностью пустые строки (все параметры NaN, кроме даты) ---
+    param_cols = [col for col in df_keys.columns if col != "date"]
+    df_keys = df_keys.dropna(how="all", subset=param_cols)
 
     # --- Экспорт «человеческого» варианта ---
     df_names.to_excel("debug_diary_dataframe.xlsx", index=False)

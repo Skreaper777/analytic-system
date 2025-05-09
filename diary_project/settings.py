@@ -15,10 +15,6 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-lopkc_wyg9=79f^6w(d(cp^474gazx)(6f#nt(1xst%1b)e!tw'
 
@@ -26,9 +22,6 @@ SECRET_KEY = 'django-insecure-lopkc_wyg9=79f^6w(d(cp^474gazx)(6f#nt(1xst%1b)e!tw
 DEBUG = True
 
 ALLOWED_HOSTS = []
-
-
-# Application definition
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -69,20 +62,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'diary_project.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
-
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -99,41 +84,51 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
-
 LANGUAGE_CODE = 'ru-ru'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = 'static/'
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGGING = {
     "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "detailed": {
+            "format": "%(asctime)s — %(name)s — %(levelname)s — %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "detailed",
         },
+        "diary_file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "diary.log",
+            "formatter": "detailed",
+            "encoding": "utf-8",
+        },
+        "predict_file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "predict.log",
+            "formatter": "detailed",
+            "encoding": "utf-8",
+        },
     },
-    "formatters": {
-        "detailed": {
-            "format": "%(asctime)s — %(name)s — %(levelname)s — %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S"
+    "loggers": {
+        "diary": {
+            "handlers": ["diary_file", "console"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "predict": {
+            "handlers": ["predict_file", "console"],
+            "level": "DEBUG",
+            "propagate": False,
         },
     },
     "root": {

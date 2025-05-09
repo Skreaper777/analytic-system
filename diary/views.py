@@ -18,13 +18,8 @@ from .models import Entry, EntryValue, Parameter
 from .ml_utils.utils import get_diary_dataframe
 from .ml_utils import base_model
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("predict")
 logger.setLevel(logging.DEBUG)
-file_handler = logging.FileHandler("diary.log", encoding="utf-8")
-file_handler.setFormatter(
-    logging.Formatter("[%(asctime)s] [%(levelname)s] %(name)s: %(message)s", "%d/%b/%Y %H:%M:%S")
-)
-logger.addHandler(file_handler)
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -85,10 +80,16 @@ def update_value(request):
         return JsonResponse({"error": str(exc)}, status=400)
 
     entry, _ = Entry.objects.get_or_create(date=day)
-    parameter = Parameter.objects.get(key=param_key)
-    EntryValue.objects.update_or_create(entry=entry, parameter=parameter, defaults={"value": value})
-    logger.debug("update_value: %s=%s on %s", param_key, value, day)
-    return JsonResponse({"status": "ok"})
+    parameter = Parameter.objects.filter(key=param_key).first()
+    if not parameter:
+        return JsonResponse({"error": "Unknown parameter"}, status=400)
+
+    entry_value, _ = EntryValue.objects.get_or_create(entry=entry, parameter=parameter)
+    entry_value.value = value
+    entry_value.save()
+
+    logger.info("Saved %s = %s for %s", param_key, value, day)
+    return JsonResponse({"success": True})
 
 
 @csrf_exempt
@@ -105,11 +106,9 @@ def predict_today(request):
         df = get_diary_dataframe().copy()
         numeric_columns = [c for c in df.columns if c not in ("date",)]
 
-        # rus_name → key map
         name_to_key = {p.name_ru: p.key for p in Parameter.objects.filter(active=True)}
         key_to_rus = {v: k for k, v in name_to_key.items()}
 
-        # Составляем today_row и список реально введённых признаков
         today_row: dict[str, float] = {}
         provided_rus: set[str] = set()
         for rus in numeric_columns:
@@ -121,13 +120,20 @@ def predict_today(request):
 
         predictions: dict[str, float] = {}
         for target in numeric_columns:
-            exclude = list(provided_rus - {target})  # исключаем только введённые, кроме цели
-            model_info = base_model.train_model(df, target, exclude=exclude)
-            model = model_info["model"]
-            features = model_info.get("features", getattr(model, "feature_names_in_", []))
-            X_today = pd.DataFrame([{f: today_row.get(f, 0.0) for f in features}])
-            pred_val = round(float(model.predict(X_today)[0]), 2)
-            predictions[name_to_key.get(target, target)] = pred_val
+            exclude = list(provided_rus - {target})
+            try:
+                model_info = base_model.train_model(df, target, exclude=exclude)
+                model = model_info["model"]
+                features = model_info.get("features", getattr(model, "feature_names_in_", []))
+                if not features:
+                    logger.warning("Skipped prediction for %s — no features left after exclude", target)
+                    continue
+                X_today = pd.DataFrame([{f: today_row.get(f, 0.0) for f in features}])
+                pred_val = round(float(model.predict(X_today)[0]), 2)
+                predictions[name_to_key.get(target, target)] = pred_val
+            except Exception as e:
+                logger.exception("Model training failed for %s", target)
+                continue
 
         logger.debug("predict_today → %s", predictions)
         return JsonResponse(predictions)
