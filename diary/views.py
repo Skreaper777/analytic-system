@@ -165,11 +165,11 @@ def train_models_view(request):
     logger.info("🟡 train_models_view вызван")
     try:
         result = subprocess.run(["python", "manage.py", "train_models"], check=True, capture_output=True, text=True)
-        logger.info("🟢 train_all_models.py выполнен успешно")
+        logger.info("🟢 train_models выполнена успешно")
         logger.info("STDOUT:\n%s", result.stdout)
         logger.info("STDERR:\n%s", result.stderr)
     except subprocess.CalledProcessError as e:
-        logger.error("🔴 Ошибка при запуске train_all_models.py: %s", str(e))
+        logger.error("🔴 Ошибка при запуске train_models: %s", str(e))
         logger.error("STDOUT:\n%s", e.stdout)
         logger.error("STDERR:\n%s", e.stderr)
 

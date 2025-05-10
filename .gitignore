@@ -66,3 +66,4 @@ config.yaml
 local_settings.py
 
 *.xlsx
+*.pkl
