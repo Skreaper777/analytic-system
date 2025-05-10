@@ -135,60 +135,43 @@ def add_entry(request):
         logger.debug("Invalid date '%s' — fallback to today", date_str)
 
     entry, _ = Entry.objects.get_or_create(date=entry_date)
-
-    if request.method == "POST":
-        logger.debug(f"🧩 POST received: {request.POST}")
-        param_key = request.POST.get("parameter_key")
-        value = request.POST.get("value")
-        try:
-            param = Parameter.objects.get(key=param_key)
-            logger.debug(f"🧪 Попытка сохранить: entry_id={entry.id}, param={param}, value={value}")
-            ev, created = EntryValue.objects.update_or_create(
-                entry=entry,
-                parameter=param,
-                defaults={"value": value}
-            )
-            logger.debug(f"✅ EntryValue {'создан' if created else 'обновлён'}: {ev}")
-        except Parameter.DoesNotExist:
-            logger.error(f"❌ Parameter with key '{param_key}' not found")
-
-    form = EntryForm(instance=entry)
-
-    # ---- Текущие значения поля -> словарь {key: value}
-    parameter_qs = Parameter.objects.filter(active=True)
-    parameter_keys = list(parameter_qs.values_list("key", flat=True))
-    all_values = EntryValue.objects.filter(entry=entry)
-    logger.debug(f"🧱 EntryValue for entry {entry.id}: " + "; ".join([f"{v.parameter_id} → {v.value}" for v in all_values]))
-    today_values = {ev.parameter.key: ev.value for ev in all_values}
-    logger.debug(f"🔍 today_values: {today_values}")
-    logger.debug(f"🔍 today_values: {today_values}")
-    for k in parameter_keys:
-        today_values.setdefault(k, 0.0)
-
-    # ---- Прогнозы
+    form = EntryForm(request.POST or None, instance=entry)
+    if request.method == "POST" and form.is_valid():
+        for key, val in form.cleaned_data.items():
+            if key in ('csrfmiddlewaretoken', 'comment'):
+                if key == 'comment':
+                    entry.comment = val
+                    entry.save()
+                    logger.debug(f"💬 Updated comment: {val}")
+                continue
+            try:
+                param = Parameter.objects.get(key=key)
+                if val is None or val == "":
+                    EntryValue.objects.filter(entry=entry, parameter=param).delete()
+                    logger.debug(f"🗑️ Удалено значение для параметра {param}")
+                else:
+                    ev, created = EntryValue.objects.update_or_create(
+                        entry=entry,
+                        parameter=param,
+                        defaults={"value": val},
+                    )
+                    logger.debug(f"✅ EntryValue {'создан' if created else 'обновлён'}: {ev}")
+            except Parameter.DoesNotExist:
+                logger.error(f"❌ Parameter with key '{key}' not found")
+        return HttpResponseRedirect(reverse("diary:add_entry"))
+    # Подготовка данных для прогнозов
     df = get_diary_dataframe().copy()
-
-    live_raw  = _predict_for_row(df, today_values, mode="live")
-    base_raw  = _predict_for_row(df, today_values, mode="base")
-
+    # Получаем значения текущей записи
+    values_qs = EntryValue.objects.filter(entry=entry).select_related('parameter')
+    today_values = {ev.parameter.key: ev.value or 0 for ev in values_qs}
+    # Вычисляем raw-прогнозы
+    live_raw = _predict_for_row(df, today_values, mode="live")
+    base_raw = _predict_for_row(df, today_values, mode="base")
+    # Формируем структуры для шаблона
     live_predictions = _build_pred_dict(live_raw, today_values)
     base_predictions = _build_pred_dict(base_raw, today_values)
-
-    if request.method == "POST":
-        logger.debug(f"🧩 POST received: {request.POST}")
-        param_key = request.POST.get("parameter_key")
-        value = request.POST.get("value")
-        try:
-            param = Parameter.objects.get(key=param_key)
-            logger.debug(f"🧪 Попытка сохранить: entry_id={entry.id}, param={{param}}, value={{value}}")
-            ev, created = EntryValue.objects.update_or_create(
-                entry=entry,
-                parameter=param,
-                defaults={"value": value}
-            )
-            logger.debug(f"✅ EntryValue {'создан' if created else 'обновлён'}: {ev}")
-        except Parameter.DoesNotExist:
-            logger.error(f"❌ Parameter with key '{param_key}' not found")
+    # Ключи параметров для JS
+    parameter_keys = list(live_raw.keys())
 
     context = {
         "form": form,
@@ -200,21 +183,6 @@ def add_entry(request):
         "live_predictions": live_predictions,
         "base_predictions": base_predictions,
     }
-    if request.method == "POST":
-        logger.debug(f"🧩 POST received: {request.POST}")
-        param_key = request.POST.get("parameter_key")
-        value = request.POST.get("value")
-        try:
-            param = Parameter.objects.get(key=param_key)
-            logger.debug(f"🧪 Попытка сохранить: entry_id={entry.id}, param={{param}}, value={{value}}")
-            ev, created = EntryValue.objects.update_or_create(
-                entry=entry,
-                parameter=param,
-                defaults={"value": value}
-            )
-            logger.debug(f"✅ EntryValue {'создан' if created else 'обновлён'}: {ev}")
-        except Parameter.DoesNotExist:
-            logger.error(f"❌ Parameter with key '{param_key}' not found")
     return render(request, "diary/add_entry.html", context)
 
 def entry_success(request):
