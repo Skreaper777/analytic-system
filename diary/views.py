@@ -94,7 +94,10 @@ def _predict_for_row(
                 features = [c for c in df.columns if c not in ("date", target)]
 
             # --- 3. Формируем строку для предсказания
-            safe_today = {f: float(today_values.get(f, 0.0) or 0.0) for f in features}
+            safe_today = {
+        f: float(today_values.get(f)) if today_values.get(f) not in [None, '', 'None'] else 0.0
+        for f in features
+    }
             X_today = pd.DataFrame([safe_today])
 
             # --- 4. Предсказываем
