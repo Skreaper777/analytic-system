@@ -19,6 +19,7 @@ from typing import Any, Dict
 
 import joblib
 import pandas as pd
+import numpy as np
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render
@@ -50,7 +51,7 @@ def _predict_for_row(
     today_values: Dict[str, float],
     mode: str = "live",
 ) -> Dict[str, float]:
-    """Возвращает прогнозы для строки `today_values` в двух режимах.
+    """Возвращает прогнозы для строки ``today_values`` в двух режимах.
 
     Parameters
     ----------
@@ -72,12 +73,11 @@ def _predict_for_row(
 
     for target in today_values.keys():
         try:
+            # --- 1. Получаем модель и список фичей
             if mode == "live":
                 model_info = base_model.train_model(df.copy(), target=target, exclude=[target])
                 model = model_info.get("model")
                 features = model_info.get("features", getattr(model, "feature_names_in_", []))
-                if model is None or not features:
-                    continue
             else:  # base
                 model_path = os.path.join(model_dir, f"{target}.pkl")
                 if not os.path.exists(model_path):
@@ -85,10 +85,19 @@ def _predict_for_row(
                     continue
                 model = joblib.load(model_path)
                 features = getattr(model, "feature_names_in_", [])
-                if not features:  # fallback – все колонки без date/target
-                    features = [c for c in df.columns if c not in ("date", target)]
 
-            X_today = pd.DataFrame([{f: today_values.get(f, 0.0) for f in features}])
+            # --- 2. Приводим features к списку
+            if isinstance(features, (pd.Index, np.ndarray)):
+                features = features.tolist()
+            if not features:
+                # fallback – все колонки без date/target
+                features = [c for c in df.columns if c not in ("date", target)]
+
+            # --- 3. Формируем строку для предсказания
+            safe_today = {f: float(today_values.get(f, 0.0) or 0.0) for f in features}
+            X_today = pd.DataFrame([safe_today])
+
+            # --- 4. Предсказываем
             pred_val = float(model.predict(X_today)[0])
             predictions[target] = round(pred_val, 2)
         except Exception:
@@ -96,7 +105,6 @@ def _predict_for_row(
             continue
 
     return predictions
-
 def _build_pred_dict(
     raw_preds: Dict[str, float],
     today_values: Dict[str, float],
