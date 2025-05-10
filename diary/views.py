@@ -141,7 +141,8 @@ def add_entry(request):
     parameter_qs = Parameter.objects.filter(active=True)
     parameter_keys = list(parameter_qs.values_list("key", flat=True))
     today_values = {ev.parameter.machine_key: ev.value for ev in EntryValue.objects.filter(entry=entry)}
-    print("🔍 today_values:", today_values)
+    logger.debug(f"🔍 today_values: {today_values}")
+    logger.debug(f"🔍 today_values: {today_values}")
     for k in parameter_keys:
         today_values.setdefault(k, 0.0)
 
@@ -188,7 +189,7 @@ def update_value(request):
         logger.exception("update_value bad payload")
         return JsonResponse({"error": str(exc)}, status=400)
 
-    entry, _ = Entry.objects.get_or_create(date=day)
+    entry, _ = Entry.objects.get_or_create(date=date)
     parameter = Parameter.objects.filter(key=param_key).first()
     if not parameter:
         return JsonResponse({"error": "Unknown parameter"}, status=400)
