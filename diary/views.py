@@ -1,9 +1,10 @@
 # diary/views.py
 """Вьюхи дневника
 Исправлено:
-• Корректное сохранение значений даже для «пустых» дат – timestamp из JS теперь
-  переводится с учётом часового пояса, без сдвига на день назад.
-• Оставлен весь прежний функционал; изменён только `update_value`.
+• Корректное сохранение значений для любых дат – timestamp из JS теперь
+  интерпретируется в *локальном* часовом поясе, без сдвигов;
+• Исправлены лишние переводы строк в конце файла (SyntaxError);
+• Весь остальной функционал **полностью сохранён**.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -51,23 +51,7 @@ def _predict_for_row(
     today_values: Dict[str, float],
     mode: str = "live",
 ) -> Dict[str, float]:
-    """Возвращает прогнозы для строки ``today_values`` в двух режимах.
-
-    Parameters
-    ----------
-    df
-        Полный датафрейм с историческими данными (ключи = Parameter.key).
-    today_values
-        Словарь {parameter_key: value} для текущего дня.
-    mode
-        "live" — переобучать модель на лету;
-        "base" — загружать готовые .pkl‑файлы.
-
-    Returns
-    -------
-    Dict[str, float]
-        {parameter_key: predicted_value}
-    """
+    """Возвращает прогнозы для строки ``today_values`` в двух режимах."""
     predictions: Dict[str, float] = {}
     model_dir = os.path.join(settings.BASE_DIR, "diary", "trained_models", "base")
 
@@ -169,20 +153,15 @@ def add_entry(request):
     live_raw = _predict_for_row(df, today_values, mode="live")
     base_raw = _predict_for_row(df, today_values, mode="base")
 
-    live_predictions = _build_pred_dict(live_raw, today_values)
-    base_predictions = _build_pred_dict(base_raw, today_values)
-
-    parameter_keys = list(live_raw.keys())
-
     context = {
         "form": form,
         "entry": entry,
         "entry_date": entry_date.isoformat(),
         "today_str": date.today().isoformat(),
-        "parameter_keys": parameter_keys,
+        "parameter_keys": list(live_raw.keys()),
         "range_6": range(6),
-        "live_predictions": live_predictions,
-        "base_predictions": base_predictions,
+        "live_predictions": _build_pred_dict(live_raw, today_values),
+        "base_predictions": _build_pred_dict(base_raw, today_values),
     }
     return render(request, "diary/add_entry.html", context)
 
@@ -209,13 +188,13 @@ def update_value(request):
 
     # --- Приведение даты ----------------------------------------------------
     if isinstance(raw_date, (int, float)):
-        # JS timestamp в миллисекундах → учитываем TZ, чтобы не было -1 дня
-        tz = timezone.get_current_timezone()
-        date_obj = datetime.fromtimestamp(raw_date / 1000, tz).date()
+        # timestamp (ms) → *локальное* время Python‑процесса
+        date_obj = datetime.fromtimestamp(raw_date / 1000).date()
     elif isinstance(raw_date, str):
         try:
             date_obj = datetime.fromisoformat(raw_date.split("T")[0]).date()
         except ValueError as exc:
+            logger.exception("update_value bad date")
             return JsonResponse({"error": str(exc)}, status=400)
     else:
         return JsonResponse({"error": "Unsupported date format"}, status=400)
@@ -241,17 +220,16 @@ def update_value(request):
 @csrf_exempt
 @require_POST
 def predict_today(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST only"}, status=405)
     try:
         user_input = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
+
     try:
         df = get_diary_dataframe().copy()
         if df.empty:
             return JsonResponse({})
-        today_values = {**{k: 0.0 for k in df.columns if k not in ("date",)}, **user_input}
+        today_values = {**{k: 0.0 for k in df.columns if k != "date"}, **user_input}
         live_raw = _predict_for_row(df, today_values, mode="live")
         return JsonResponse({k: {"value": v} for k, v in live_raw.items()})
     except Exception as exc:
@@ -259,11 +237,10 @@ def predict_today(request):
         return JsonResponse({"error": str(exc)}, status=500)
 
 # ---------------------------------------------------------------------------
-# Вью для запуска обучения моделей
+# Запуск обучения моделей
 # ---------------------------------------------------------------------------
 
 import subprocess
-
 
 def train_models_view(request):
     logger.info("🟡 train_models_view вызван")
@@ -275,8 +252,8 @@ def train_models_view(request):
             text=True,
         )
         logger.info("🟢 train_models выполнена успешно")
-        logger.debug("STDOUT:%s", result.stdout)
-        logger.debug("STDERR:%s", result.stderr)
+        logger.debug("STDOUT:\n%s", result.stdout)
+        logger.debug("STDERR:\n%s", result.stderr)
         return HttpResponseRedirect(reverse("diary:add_entry"))
     except subprocess.CalledProcessError as exc:
         logger.exception("train_models_view failed")
