@@ -21,4 +21,7 @@ urlpatterns = [
 
     # Редирект после успешного сохранения
     path("success/", views.entry_success, name="entry_success"),
+
+    # Обучение моделей
+    path("train-models/", views.train_models_view, name="train_models"),
 ]

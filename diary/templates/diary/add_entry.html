@@ -30,6 +30,13 @@
 </head>
 <body>
 <div class="container">
+
+{% if request.GET.trained == "1" %}
+    <div style="background-color:#155724; color:#d4edda; border:1px solid #28a745; padding:10px; border-radius:5px; margin-bottom:20px;">
+        ✅ Обучение завершено успешно.
+    </div>
+{% endif %}
+
     <h2>📘 Дневник состояния</h2>
     <div class="date-selector">
         {% with request.GET.date|default:today_str as current_date %}
@@ -54,7 +61,12 @@
                 <div class="predicted-secondary" id="predicted-alt-{{ field.name }}"></div>
             {% endif %}
         {% endfor %}
-        <button type="submit">💾 Сохранить</button>
+
+<form method="get" action="/train-models/?trained=1" style="margin-top: 20px;">
+    <button type="submit" style="background-color:#007bff;">Обучить модель</button>
+</form>
+
+<button type="submit">💾 Сохранить</button>
     </form>
 </div>
 

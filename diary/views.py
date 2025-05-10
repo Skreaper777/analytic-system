@@ -21,6 +21,7 @@ from .ml_utils import base_model
 logger = logging.getLogger("predict")
 logger.setLevel(logging.DEBUG)
 
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -30,6 +31,7 @@ def _safe_float(value: Any) -> float:
         return float(value) if value not in ("", None) else 0.0
     except (TypeError, ValueError):
         return 0.0
+
 
 # ---------------------------------------------------------------------------
 # Pages
@@ -61,6 +63,7 @@ def add_entry(request):
 
 def entry_success(request):
     return HttpResponseRedirect(reverse("diary:add_entry"))
+
 
 # ---------------------------------------------------------------------------
 # AJAX endpoints
@@ -119,7 +122,19 @@ def predict_today(request):
         for target in numeric_columns:
             exclude = [target]  # ❗️Возвращено поведение старой версии
             try:
-                model_info = base_model.train_model(df, target, exclude=exclude)
+
+                import os
+                import joblib
+
+                model_path = os.path.join("diary", "trained_models", "base", f"{target}.pkl")
+                if os.path.exists(model_path):
+                    model = joblib.load(model_path)
+                    features = getattr(model, "feature_names_in_", [])
+                else:
+                    model_info = base_model.train_model(df, target, exclude=exclude)
+                    model = model_info["model"]
+                    features = model_info.get("features", [])
+
                 model = model_info["model"]
                 features = model_info.get("features", getattr(model, "feature_names_in_", []))
                 if not features:
@@ -153,3 +168,15 @@ def predict_today(request):
     except Exception as exc:
         logger.exception("predict_today failed")
         return JsonResponse({"error": str(exc)}, status=500)
+
+
+import subprocess
+
+
+def train_models_view(request):
+    try:
+        subprocess.run(["python", "diary/scripts/train_all_models.py"], check=True)
+        logger.info("Обучение моделей завершено успешно.")
+    except subprocess.CalledProcessError as e:
+        logger.error("Ошибка при обучении моделей: %s", str(e))
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", "/"))
