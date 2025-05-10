@@ -193,37 +193,57 @@ def entry_success(request):
 # ---------------------------------------------------------------------------
 
 @csrf_exempt
+@csrf_exempt
 def update_value(request):
-    """Сохраняет значение одного параметра."""
+    """Сохраняет значение одного параметра, приходящего со страницы `add`.
+
+    Тело запроса (JSON):
+    {
+        "parameter": "<parameter_key>",
+        "value": <float|null>,
+        "date": "YYYY-MM-DD" | <unix_ms>
+    }
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
     try:
         data = json.loads(request.body.decode("utf-8"))
-        param_key: str = data["parameter"]
-        value: float | None = data["value"]
-        day = datetime.strptime(data["date"], "%Y-%m-%d").date()
-    except (KeyError, ValueError, json.JSONDecodeError) as exc:
+        param_key = data["parameter"]
+        value = data["value"]
+        raw_date = data["date"]
+    except (KeyError, json.JSONDecodeError) as exc:
         logger.exception("update_value bad payload")
         return JsonResponse({"error": str(exc)}, status=400)
 
-    entry, _ = Entry.objects.get_or_create(date=date)
+    # --- Приведение даты ---------------------------------------------------------------
+    try:
+        if isinstance(raw_date, (int, float)):
+            # timestamp (ms)
+            date_obj = datetime.utcfromtimestamp(raw_date / 1000).date()
+        elif isinstance(raw_date, str):
+            # Стандартный ISO‑формат YYYY‑MM‑DD или полный ISO‑datetime
+            date_obj = datetime.fromisoformat(raw_date).date()
+        elif isinstance(raw_date, date):
+            date_obj = raw_date
+        else:
+            raise ValueError("Unsupported date format")
+    except ValueError as exc:
+        logger.exception("update_value bad date")
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    # --- Сохраняем/обновляем -----------------------------------------------------------
+    entry, _ = Entry.objects.get_or_create(date=date_obj)
     parameter = Parameter.objects.filter(key=param_key).first()
     if not parameter:
         return JsonResponse({"error": "Unknown parameter"}, status=400)
 
     entry_value, _ = EntryValue.objects.get_or_create(entry=entry, parameter=parameter)
     entry_value.value = value
-    entry_value.save()
+    entry_value.save(update_fields=["value"])
 
-    logger.info("Saved %s = %s for %s", param_key, value, day.isoformat())
+    logger.info("Saved %s = %s for %s", param_key, value, date_obj.isoformat())
     return JsonResponse({"ok": True})
-
-# ---------------------------------------------------------------------------
-# prediction endpoint для JS
-# ---------------------------------------------------------------------------
-
-@csrf_exempt
 def predict_today(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
