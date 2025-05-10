@@ -140,7 +140,9 @@ def add_entry(request):
     # ---- Текущие значения поля -> словарь {key: value}
     parameter_qs = Parameter.objects.filter(active=True)
     parameter_keys = list(parameter_qs.values_list("key", flat=True))
-    today_values = {ev.parameter.machine_key: ev.value for ev in EntryValue.objects.filter(entry=entry)}
+    all_values = EntryValue.objects.filter(entry=entry)
+    logger.debug(f"🧱 EntryValue for entry {entry.id}: " + "; ".join([f"{v.parameter_id} → {v.value}" for v in all_values]))
+    today_values = {ev.parameter.key: ev.value for ev in all_values}
     logger.debug(f"🔍 today_values: {today_values}")
     logger.debug(f"🔍 today_values: {today_values}")
     for k in parameter_keys:
