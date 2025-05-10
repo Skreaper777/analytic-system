@@ -1,4 +1,3 @@
-
 # diary/views.py
 """Вьюхи дневника – добавлена поддержка двух типов прогнозов:
 • «На лету» — обучение моделей каждый раз без использования .pkl‑файлов;
@@ -141,7 +140,8 @@ def add_entry(request):
     # ---- Текущие значения поля -> словарь {key: value}
     parameter_qs = Parameter.objects.filter(active=True)
     parameter_keys = list(parameter_qs.values_list("key", flat=True))
-    today_values = {ev.parameter.key: ev.value for ev in EntryValue.objects.filter(entry=entry)}
+    today_values = {ev.parameter.machine_key: ev.value for ev in EntryValue.objects.filter(entry=entry)}
+    print("🔍 today_values:", today_values)
     for k in parameter_keys:
         today_values.setdefault(k, 0.0)
 
