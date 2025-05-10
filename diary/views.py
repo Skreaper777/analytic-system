@@ -21,7 +21,6 @@ from .ml_utils import base_model
 logger = logging.getLogger("predict")
 logger.setLevel(logging.DEBUG)
 
-
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -31,7 +30,6 @@ def _safe_float(value: Any) -> float:
         return float(value) if value not in ("", None) else 0.0
     except (TypeError, ValueError):
         return 0.0
-
 
 # ---------------------------------------------------------------------------
 # Pages
@@ -63,7 +61,6 @@ def add_entry(request):
 
 def entry_success(request):
     return HttpResponseRedirect(reverse("diary:add_entry"))
-
 
 # ---------------------------------------------------------------------------
 # AJAX endpoints
@@ -122,19 +119,7 @@ def predict_today(request):
         for target in numeric_columns:
             exclude = [target]  # ❗️Возвращено поведение старой версии
             try:
-
-                import os
-                import joblib
-
-                model_path = os.path.join("diary", "trained_models", "base", f"{target}.pkl")
-                if os.path.exists(model_path):
-                    model = joblib.load(model_path)
-                    features = getattr(model, "feature_names_in_", [])
-                else:
-                    model_info = base_model.train_model(df, target, exclude=exclude)
-                    model = model_info["model"]
-                    features = model_info.get("features", [])
-
+                model_info = base_model.train_model(df, target, exclude=exclude)
                 model = model_info["model"]
                 features = model_info.get("features", getattr(model, "feature_names_in_", []))
                 if not features:
@@ -169,15 +154,12 @@ def predict_today(request):
         logger.exception("predict_today failed")
         return JsonResponse({"error": str(exc)}, status=500)
 
-
-import subprocess
-
 import subprocess
 import logging
-from django.http import HttpResponse
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 
 logger = logging.getLogger(__name__)
-
 
 def train_models_view(request):
     logger.info("🟡 train_models_view вызван")
@@ -189,15 +171,11 @@ def train_models_view(request):
             text=True
         )
         logger.info("🟢 train_all_models.py выполнен успешно")
-        logger.info("STDOUT:
-                    " + result.stdout)
-        logger.info("STDERR:
-                    " + result.stderr)
+        logger.info("STDOUT:\n%s", result.stdout)
+        logger.info("STDERR:\n%s", result.stderr)
     except subprocess.CalledProcessError as e:
         logger.error("🔴 Ошибка при запуске train_all_models.py: %s", str(e))
-        logger.error("STDOUT:
-                     " + e.stdout)
-        logger.error("STDERR:
-                     " + e.stderr)
-        from django.urls import reverse
-    return HttpResponseRedirect(reverse("diary:add_entry") + "?trained=1") + "?trained=1")
+        logger.error("STDOUT:\n%s", e.stdout)
+        logger.error("STDERR:\n%s", e.stderr)
+
+    return HttpResponseRedirect(reverse("diary:add_entry") + "?trained=1")
