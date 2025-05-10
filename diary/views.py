@@ -118,7 +118,7 @@ def _build_pred_dict(
         diff = val - today_values.get(key, 0.0)
         out[key] = {
             "value": round(val, 1),
-            "delta": round(diff, 1),
+            "delta": round(val - today_values.get(key, 0.0), 1) if val is not None and today_values.get(key) is not None else None,
             "color": _color_hint(diff),
         }
     return out
