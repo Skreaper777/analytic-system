@@ -187,10 +187,7 @@ def update_value(request):
         return JsonResponse({"error": str(exc)}, status=400)
 
     # --- Приведение даты ----------------------------------------------------
-    if isinstance(raw_date, (int, float)):
-        # timestamp (ms) → *локальное* время Python‑процесса
-        date_obj = datetime.fromtimestamp(raw_date / 1000).date()
-    elif isinstance(raw_date, str):
+    if isinstance(raw_date, str):
         try:
             date_obj = datetime.fromisoformat(raw_date.split("T")[0]).date()
         except ValueError as exc:
