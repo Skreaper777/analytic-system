@@ -68,7 +68,7 @@
     <button type="submit" style="background-color:#007bff;">Обучить модель</button>
 </form>
 
-<form method="post">
+<div id="param-container">
         {% csrf_token %}
         {% for field in form %}
             {% if field.name == "comment" %}
@@ -114,15 +114,13 @@
                 {% endwith %}
             {% endif %}
         {% endfor %}
-
-<button type="submit">💾 Сохранить</button>
-    </form>
+    </div>
 </div>
 
 <script>
     const predictUrl = "{% url 'diary:predict_today' %}";
     const updateUrl  = "{% url 'diary:update_value' %}";
-    const entryDate  = "{{ today_str }}";
+    const entryDate  = "{{ entry_date }}";
 
     function getCookie(name) {
         let cookieValue = null;

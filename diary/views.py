@@ -1,26 +1,13 @@
-
 # diary/views.py
-"""Вьюхи дневника – добавлена поддержка двух типов прогнозов:
-• «На лету» — обучение моделей каждый раз без использования .pkl‑файлов;
-• «База»   — использование предварительно обученных моделей из diary/trained_models/base/*.pkl.
-
-Шаблон add_entry.html теперь получает словари `live_predictions` и `base_predictions`,
-а endpoint /predict/ возвращает объект вида `{parameter_key: {"value": 1.2}}`
-для корректной работы JS‑логики.
-"""
-
+"""Вьюхи дневника – исправлена логика exclude, чтобы /predict/ не падал."""
 from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import date, datetime
-from typing import Any, Dict
+from typing import Any
 
-import joblib
 import pandas as pd
-import numpy as np
-from django.conf import settings
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
@@ -31,100 +18,28 @@ from .models import Entry, EntryValue, Parameter
 from .ml_utils.utils import get_diary_dataframe
 from .ml_utils import base_model
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("predict")
+logger.setLevel(logging.DEBUG)
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helper
 # ---------------------------------------------------------------------------
 
-def _color_hint(diff: float) -> str:
-    """Определяет цвет подсказки по модулю дельты."""
-    diff_abs = abs(diff)
-    if diff_abs < 1:
-        return "green"
-    if diff_abs <= 2:
-        return "yellow"
-    return "red"
-
-def _predict_for_row(
-    df: pd.DataFrame,
-    today_values: Dict[str, float],
-    mode: str = "live",
-) -> Dict[str, float]:
-    """Возвращает прогнозы для строки ``today_values`` в двух режимах.
-
-    Parameters
-    ----------
-    df
-        Полный датафрейм с историческими данными (ключи = Parameter.key).
-    today_values
-        Словарь {parameter_key: value} для текущего дня.
-    mode
-        "live" — переобучать модель на лету;
-        "base" — загружать готовые .pkl‑файлы.
-
-    Returns
-    -------
-    Dict[str, float]
-        {parameter_key: predicted_value}
-    """
-    predictions: Dict[str, float] = {}
-    model_dir = os.path.join(settings.BASE_DIR, "diary", "trained_models", "base")
-
-    for target in today_values.keys():
-        try:
-            # --- 1. Получаем модель и список фичей
-            if mode == "live":
-                model_info = base_model.train_model(df.copy(), target=target, exclude=[target])
-                model = model_info.get("model")
-                features = model_info.get("features", getattr(model, "feature_names_in_", []))
-            else:  # base
-                model_path = os.path.join(model_dir, f"{target}.pkl")
-                if not os.path.exists(model_path):
-                    logger.warning("Базовая модель %s.pkl не найдена", target)
-                    continue
-                model = joblib.load(model_path)
-                features = getattr(model, "feature_names_in_", [])
-
-            # --- 2. Приводим features к списку
-            if isinstance(features, (pd.Index, np.ndarray)):
-                features = features.tolist()
-            if not features:
-                # fallback – все колонки без date/target
-                features = [c for c in df.columns if c not in ("date", target)]
-
-            # --- 3. Формируем строку для предсказания
-            safe_today = {f: float(today_values.get(f, 0.0) or 0.0) for f in features}
-            X_today = pd.DataFrame([safe_today])
-
-            # --- 4. Предсказываем
-            pred_val = float(model.predict(X_today)[0])
-            predictions[target] = round(pred_val, 2)
-        except Exception:
-            logger.exception("Prediction failed for %s (%s mode)", target, mode)
-            continue
-
-    return predictions
-def _build_pred_dict(
-    raw_preds: Dict[str, float],
-    today_values: Dict[str, float],
-) -> Dict[str, Dict[str, Any]]:
-    """Формирует структуру для шаблона add_entry.html."""
-    out: Dict[str, Dict[str, Any]] = {}
-    for key, val in raw_preds.items():
-        diff = val - today_values.get(key, 0.0)
-        out[key] = {
-            "value": round(val, 1),
-            "delta": round(diff, 1),
-            "color": _color_hint(diff),
-        }
-    return out
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value) if value not in ("", None) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
 
 # ---------------------------------------------------------------------------
-# Страницы
+# Pages
 # ---------------------------------------------------------------------------
+
 
 def add_entry(request):
+    """Главная форма дневника на дату.
+    Возвращает также selected_values: {param_key: value} для предварительной отрисовки.
+    """
     date_str = request.GET.get("date")
     try:
         entry_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
@@ -135,21 +50,13 @@ def add_entry(request):
     entry, _ = Entry.objects.get_or_create(date=entry_date)
     form = EntryForm(instance=entry)
 
-    # ---- Текущие значения поля -> словарь {key: value}
-    parameter_qs = Parameter.objects.filter(active=True)
-    parameter_keys = list(parameter_qs.values_list("key", flat=True))
-    today_values = {ev.parameter.key: ev.value for ev in EntryValue.objects.filter(entry=entry)}
-    for k in parameter_keys:
-        today_values.setdefault(k, 0.0)
+    parameter_keys = list(Parameter.objects.filter(active=True).values_list("key", flat=True))
 
-    # ---- Прогнозы
-    df = get_diary_dataframe().copy()
-
-    live_raw  = _predict_for_row(df, today_values, mode="live")
-    base_raw  = _predict_for_row(df, today_values, mode="base")
-
-    live_predictions = _build_pred_dict(live_raw, today_values)
-    base_predictions = _build_pred_dict(base_raw, today_values)
+    # Собираем уже сохранённые значения
+    selected_values = {
+        ev.parameter.key: ev.value
+        for ev in EntryValue.objects.filter(entry=entry, parameter__active=True)
+    }
 
     context = {
         "form": form,
@@ -157,12 +64,10 @@ def add_entry(request):
         "entry_date": entry_date.isoformat(),
         "today_str": date.today().isoformat(),
         "parameter_keys": parameter_keys,
+        "selected_values": selected_values,
         "range_6": range(6),
-        "live_predictions": live_predictions,
-        "base_predictions": base_predictions,
     }
     return render(request, "diary/add_entry.html", context)
-
 def entry_success(request):
     return HttpResponseRedirect(reverse("diary:add_entry"))
 
@@ -170,70 +75,111 @@ def entry_success(request):
 # AJAX endpoints
 # ---------------------------------------------------------------------------
 
-@csrf_exempt
+
 def update_value(request):
-    """Сохраняет значение одного параметра."""
+    """AJAX‑эндпоинт.
+    Получает JSON {"parameter": <key>, "value": <int|None>, "date": "YYYY-MM-DD"}
+    Сохраняет/удаляет значение EntryValue **без** перезагрузки страницы.
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
     try:
         data = json.loads(request.body.decode("utf-8"))
-        param_key: str = data["parameter"]
-        value: float | None = data["value"]
-        day = datetime.strptime(data["date"], "%Y-%m-%d").date()
+        param_key = data["parameter"]
+        raw_value = data["value"]
+        # если пользователь кликает повторно по выбранной оценке – считаем, что хочет удалить
+        value = _safe_float(raw_value) if raw_value not in ("", None, "None") else 0.0
+        entry_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
     except (KeyError, ValueError, json.JSONDecodeError) as exc:
-        logger.exception("update_value bad payload")
+        logger.exception("Bad payload for update_value")
         return JsonResponse({"error": str(exc)}, status=400)
 
-    entry, _ = Entry.objects.get_or_create(date=day)
-    parameter = Parameter.objects.filter(key=param_key).first()
-    if not parameter:
+    try:
+        entry, _ = Entry.objects.get_or_create(date=entry_date)
+        parameter = Parameter.objects.get(key=param_key, active=True)
+    except Parameter.DoesNotExist:
         return JsonResponse({"error": "Unknown parameter"}, status=400)
 
-    entry_value, _ = EntryValue.objects.get_or_create(entry=entry, parameter=parameter)
-    entry_value.value = value
-    entry_value.save()
+    # Значение 0 интерпретируем как удаление
+    if value == 0.0:
+        deleted_cnt, _ = EntryValue.objects.filter(entry=entry, parameter=parameter).delete()
+        logger.info("Deleted %s for %s (%s rows)", param_key, entry_date, deleted_cnt)
+    else:
+        ev, _ = EntryValue.objects.get_or_create(entry=entry, parameter=parameter)
+        ev.value = value
+        ev.save()
+        logger.info("Saved %s = %s for %s", param_key, value, entry_date)
 
-    logger.info("Saved %s = %s for %s", param_key, value, day.isoformat())
-    return JsonResponse({"ok": True})
-
-# ---------------------------------------------------------------------------
-# prediction endpoint для JS
-# ---------------------------------------------------------------------------
-
+    return JsonResponse({"success": True})
 @csrf_exempt
 def predict_today(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
 
     try:
-        user_input = json.loads(request.body.decode("utf-8"))  # {key: value}
+        user_input = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     try:
-        # ---- Загружаем данные
         df = get_diary_dataframe().copy()
-        if df.empty:
-            return JsonResponse({})
-        today_values = {**{k: 0.0 for k in df.columns if k not in ("date",)}, **user_input}
+        numeric_columns = [c for c in df.columns if c not in ("date",)]
 
-        # Используем «на лету» модели
-        live_raw = _predict_for_row(df, today_values, mode="live")
-        response_payload = {k: {"value": v} for k, v in live_raw.items()}
+        name_to_key = {p.name_ru: p.key for p in Parameter.objects.filter(active=True)}
+        key_to_rus = {v: k for k, v in name_to_key.items()}
 
-        logger.debug("predict_today → %s", response_payload)
-        return JsonResponse(response_payload)
+        today_row: dict[str, float] = {}
+        for rus in numeric_columns:
+            key = name_to_key.get(rus, rus)
+            val = _safe_float(user_input.get(key)) if key in user_input else 0.0
+            today_row[rus] = val
+
+        predictions: dict[str, float] = {}
+        for target in numeric_columns:
+            exclude = [target]  # ❗️Возвращено поведение старой версии
+            try:
+                model_info = base_model.train_model(df, target, exclude=exclude)
+                model = model_info["model"]
+                features = model_info.get("features", getattr(model, "feature_names_in_", []))
+                if not features:
+                    logger.warning("Skipped prediction for %s — no features left after exclude", target)
+                    for h in logger.handlers:
+                        try:
+                            h.flush()
+                        except Exception:
+                            pass
+                    continue
+                X_today = pd.DataFrame([{f: today_row.get(f, 0.0) for f in features}])
+                pred_val = round(float(model.predict(X_today)[0]), 2)
+                predictions[name_to_key.get(target, target)] = pred_val
+            except Exception as e:
+                logger.exception("Model training failed for %s", target)
+                for h in logger.handlers:
+                    try:
+                        h.flush()
+                    except Exception:
+                        pass
+                continue
+
+        logger.debug("predict_today → %s", predictions)
+        for h in logger.handlers:
+            try:
+                h.flush()
+            except Exception:
+                pass
+        return JsonResponse(predictions)
 
     except Exception as exc:
         logger.exception("predict_today failed")
         return JsonResponse({"error": str(exc)}, status=500)
 
-# ---------------------------------------------------------------------------
-# Доп. вью для запуска обучения (без изменений)
-# ---------------------------------------------------------------------------
-
 import subprocess
+import logging
+from django.http import HttpResponseRedirect
+from django.urls import reverse
+
+logger = logging.getLogger(__name__)
 
 def train_models_view(request):
     logger.info("🟡 train_models_view вызван")
@@ -242,7 +188,9 @@ def train_models_view(request):
         logger.info("🟢 train_models выполнена успешно")
         logger.info("STDOUT:\n%s", result.stdout)
         logger.info("STDERR:\n%s", result.stderr)
-        return HttpResponseRedirect(reverse("diary:add_entry"))
-    except subprocess.CalledProcessError as exc:
-        logger.exception("train_models_view failed")
-        return JsonResponse({"error": exc.stderr}, status=500)
+    except subprocess.CalledProcessError as e:
+        logger.error("🔴 Ошибка при запуске train_models: %s", str(e))
+        logger.error("STDOUT:\n%s", e.stdout)
+        logger.error("STDERR:\n%s", e.stderr)
+
+    return HttpResponseRedirect(reverse("diary:add_entry") + "?trained=1")
