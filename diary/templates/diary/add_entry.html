@@ -26,7 +26,28 @@
         textarea { width: 100%; padding: 10px; font-size: 1.1em; border: 1px solid #444; border-radius: 8px; resize: vertical; background:#222; color:#eee; }
         button[type="submit"] { margin-top: 30px; padding: 15px; font-size: 1.2em; background-color: #28a745; color: white; border: none; border-radius: 10px; cursor: pointer; width: 100%; }
         button[type="submit"]:hover { background-color: #1e7e34; }
-    </style>
+
+.prediction-wrapper {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.prediction-block {
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 6px 10px;
+    flex: 1;
+}
+.prediction-title {
+    font-weight: bold;
+    font-size: 0.85em;
+    margin-bottom: 4px;
+    color: #bbb;
+}
+
+</style>
 </head>
 <body>
 <div class="container">
@@ -62,7 +83,28 @@
                     {% endfor %}
                 </div>
                 <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
-                <div class="predicted" id="predicted-{{ field.name }}"></div>
+
+    <div class="prediction-wrapper">
+        <div class="prediction-block">
+            <div class="prediction-title">На лету</div>
+            {% if live_predictions.key is defined %}
+                <div class="predicted" data-color="{{ live_predictions.key.color }}">
+                    Прогноз: {{ live_predictions.key.value|floatformat:1 }}<br>
+                    Δ {{ live_predictions.key.delta|floatformat:1 }}
+                </div>
+            {% endif %}
+        </div>
+        <div class="prediction-block">
+            <div class="prediction-title">База</div>
+            {% if base_predictions.key is defined %}
+                <div class="predicted" data-color="{{ base_predictions.key.color }}">
+                    Прогноз: {{ base_predictions.key.value|floatformat:1 }}<br>
+                    Δ {{ base_predictions.key.delta|floatformat:1 }}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
                 <div class="predicted-secondary" id="predicted-alt-{{ field.name }}"></div>
             {% endif %}
         {% endfor %}
