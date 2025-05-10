@@ -164,12 +164,7 @@ logger = logging.getLogger(__name__)
 def train_models_view(request):
     logger.info("🟡 train_models_view вызван")
     try:
-        result = subprocess.run(
-            ["python", "diary/scripts/train_all_models.py"],
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        result = subprocess.run(["python", "manage.py", "train_models"], check=True, capture_output=True, text=True)
         logger.info("🟢 train_all_models.py выполнен успешно")
         logger.info("STDOUT:\n%s", result.stdout)
         logger.info("STDERR:\n%s", result.stderr)
