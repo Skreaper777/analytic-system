@@ -1,5 +1,4 @@
-{% load tz %}
-{% load dict_filters %}
+{% load tz dict_filters %}
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -58,65 +57,70 @@
     </div>
 {% endif %}
 
-<h2>📘 Дневник состояния</h2>
-<div class="date-selector">
-    {% with request.GET.date|default:today_str as current_date %}
-        <input id="date-input" type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
-    {% endwith %}
-</div>
+    <h2>📘 Дневник состояния</h2>
+    <div class="date-selector">
+        {% with request.GET.date|default:today_str as current_date %}
+            <input id="date-input" type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
+        {% endwith %}
+    </div>
 
 <form method="get" action="/train-models/?trained=1" style="margin-top: 20px;">
     <button type="submit" style="background-color:#007bff;">Обучить модель</button>
 </form>
 
 <form method="post">
-    {% csrf_token %}
-    {% for field in form %}
-        {% if field.name == "comment" %}
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-        {% else %}
-            <label>{{ field.label }}</label>
-            <div class="rating-buttons" data-name="{{ field.name }}">
-                {% for i in range_6 %}
-                    <button type="button" data-value="{{ i }}">{{ i }}</button>
-                {% endfor %}
-            </div>
-            <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
-
-            {% with key=field.name %}
-            <div class="prediction-wrapper">
-                <div class="prediction-block">
-                    <div class="prediction-title">На лету</div>
-                    {% with pred=live_predictions|dict_get:key %}
-                        {% if pred %}
-                            <div class="predicted" data-color="{{ pred.color }}">
-                                Прогноз: {{ pred.value|floatformat:1 }}<br>
-                                Δ {{ pred.delta|floatformat:1 }}
-                            </div>
-                        {% endif %}
-                    {% endwith %}
+        {% csrf_token %}
+        {% for field in form %}
+            {% if field.name == "comment" %}
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+            {% else %}
+                <label>{{ field.label }}</label>
+                <div class="rating-buttons" data-name="{{ field.name }}">
+                    {% for i in range_6 %}
+                        <button type="button" data-value="{{ i }}">{{ i }}</button>
+                    {% endfor %}
                 </div>
-                <div class="prediction-block">
-                    <div class="prediction-title">База</div>
-                    {% with pred=base_predictions|dict_get:key %}
-                        {% if pred %}
-                            <div class="predicted" data-color="{{ pred.color }}">
-                                Прогноз: {{ pred.value|floatformat:1 }}<br>
-                                Δ {{ pred.delta|floatformat:1 }}
-                            </div>
-                        {% endif %}
-                    {% endwith %}
+                <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
+
+                {% with key=field.name %}
+                <div style="background: #111; color: #f33; font-size: 0.85em; padding: 8px; margin-bottom: 10px;">
+                    <strong>DEBUG:</strong> key = {{ key }}<br>
+                    pred_live = {{ live_predictions|dict_get:key }}<br>
+                    pred_base = {{ base_predictions|dict_get:key }}
                 </div>
-            </div>
-            {% endwith %}
+                <div class="prediction-wrapper">
+                    <div class="prediction-block">
+                        <div class="prediction-title">На лету</div>
+                        {% with pred=live_predictions|dict_get:key %}
+                            {% if pred %}
+                                <div class="predicted" data-color="{{ pred.color }}">
+                                    Прогноз: {{ pred.value|floatformat:1 }}<br>
+                                    Δ {{ pred.delta|floatformat:1 }}
+                                </div>
+                            {% endif %}
+                        {% endwith %}
+                    </div>
+                    <div class="prediction-block">
+                        <div class="prediction-title">База</div>
+                        {% with pred=base_predictions|dict_get:key %}
+                            {% if pred %}
+                                <div class="predicted" data-color="{{ pred.color }}">
+                                    Прогноз: {{ pred.value|floatformat:1 }}<br>
+                                    Δ {{ pred.delta|floatformat:1 }}
+                                </div>
+                            {% endif %}
+                        {% endwith %}
+                    </div>
+                </div>
+                {% endwith %}
 
-            <div class="predicted-secondary" id="predicted-alt-{{ field.name }}"></div>
-        {% endif %}
-    {% endfor %}
+                <div class="predicted-secondary" id="predicted-alt-{{ field.name }}"></div>
+            {% endif %}
+        {% endfor %}
 
-    <button type="submit">📂 Сохранить</button>
-</form>
+<button type="submit">💾 Сохранить</button>
+    </form>
 </div>
 
 <script>
@@ -154,11 +158,14 @@
 
         function updatePredictions(data) {
             Object.entries(data).forEach(([key, val]) => {
+                const predDiv = document.getElementById(`predicted-${key}`);
                 const altDiv  = document.getElementById(`predicted-alt-${key}`);
-                if (!altDiv) return;
+                if (!predDiv) return;
                 const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
                 const diff = val - inputVal;
-                altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
+                predDiv.textContent = `Прогноз: ${val.toFixed(1)}`;
+                predDiv.dataset.color = colorHint(diff);
+                if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
             });
         }
 
