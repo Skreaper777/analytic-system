@@ -1,4 +1,3 @@
-
 import os
 import joblib
 import logging
@@ -13,14 +12,23 @@ logging.basicConfig(level=logging.INFO)
 MODEL_DIR = os.path.join("diary", "trained_models", "base")
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Удаление старых моделей
-for file in os.listdir(MODEL_DIR):
-    if file.endswith(".pkl"):
-        os.remove(os.path.join(MODEL_DIR, file))
-logger.info("Удалены старые модели перед обучением.")
-
 
 def main():
+    logger.info("🟡 Старт обучения моделей...")
+    logger.info("📄 Доступные столбцы: %s", ", ".join(df.columns))
+    logger.info("📆 Даты в обучении: от %s до %s", df["date"].min(), df["date"].max())
+
+    df = get_diary_dataframe()
+
+    today = date.today()
+    df = df[df["date"] < today]
+
+    # Удаление старых моделей
+    for file in os.listdir(MODEL_DIR):
+        if file.endswith(".pkl"):
+            os.remove(os.path.join(MODEL_DIR, file))
+    logger.info("Удалены старые модели перед обучением.")
+
     df = get_diary_dataframe()
 
     today = date.today()
@@ -39,6 +47,7 @@ def main():
             logger.info("Обучено: %s → %s", target, file_path)
         else:
             logger.warning("Пропущено: %s — модель не обучена (признаков нет)", target)
+
 
 if __name__ == "__main__":
     main()

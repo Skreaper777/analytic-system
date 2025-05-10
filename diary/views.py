@@ -172,11 +172,32 @@ def predict_today(request):
 
 import subprocess
 
+import subprocess
+import logging
+from django.http import HttpResponse
+
+logger = logging.getLogger(__name__)
+
 
 def train_models_view(request):
+    logger.info("🟡 train_models_view вызван")
     try:
-        subprocess.run(["python", "diary/scripts/train_all_models.py"], check=True)
-        logger.info("Обучение моделей завершено успешно.")
+        result = subprocess.run(
+            ["python", "diary/scripts/train_all_models.py"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        logger.info("🟢 train_all_models.py выполнен успешно")
+        logger.info("STDOUT:
+                    " + result.stdout)
+        logger.info("STDERR:
+                    " + result.stderr)
     except subprocess.CalledProcessError as e:
-        logger.error("Ошибка при обучении моделей: %s", str(e))
-    return HttpResponseRedirect(request.META.get("HTTP_REFERER", "/"))
+        logger.error("🔴 Ошибка при запуске train_all_models.py: %s", str(e))
+        logger.error("STDOUT:
+                     " + e.stdout)
+        logger.error("STDERR:
+                     " + e.stderr)
+        from django.urls import reverse
+    return HttpResponseRedirect(reverse("diary:add_entry") + "?trained=1") + "?trained=1")
