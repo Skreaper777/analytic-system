@@ -84,38 +84,34 @@
                 <input type="hidden" name="{{ field.name }}" id="input-{{ field.name }}" value="{{ field.value|stringformat:'s'|default_if_none:'' }}">
 
                 {% with key=field.name %}
-                <div style="background: #111; color: #f33; font-size: 0.85em; padding: 8px; margin-bottom: 10px;">
-                    <strong>DEBUG:</strong> key = {{ key }}<br>
-                    pred_live = {{ live_predictions|dict_get:key }}<br>
-                    pred_base = {{ base_predictions|dict_get:key }}
-                </div>
+                {% with pred=live_predictions|dict_get:key %}
                 <div class="prediction-wrapper">
                     <div class="prediction-block">
                         <div class="prediction-title">На лету</div>
-                        {% with pred=live_predictions|dict_get:key %}
-                            {% if pred %}
-                                <div class="predicted" data-color="{{ pred.color }}">
-                                    Прогноз: {{ pred.value|floatformat:1 }}<br>
-                                    Δ {{ pred.delta|floatformat:1 }}
-                                </div>
-                            {% endif %}
-                        {% endwith %}
+                        {% if pred %}
+                            <div class="predicted" data-color="{{ pred.color }}" id="predicted-{{ key }}">
+                                Прогноз: {{ pred.value|floatformat:1 }}
+                            </div>
+                            <div class="predicted-secondary" id="predicted-alt-{{ key }}">Δ {{ pred.delta|floatformat:1 }}</div>
+                        {% else %}
+                            <div class="predicted" id="predicted-{{ key }}"></div>
+                            <div class="predicted-secondary" id="predicted-alt-{{ key }}"></div>
+                        {% endif %}
                     </div>
+                    {% endwith %}
+                    {% with pred=base_predictions|dict_get:key %}
                     <div class="prediction-block">
                         <div class="prediction-title">База</div>
-                        {% with pred=base_predictions|dict_get:key %}
-                            {% if pred %}
-                                <div class="predicted" data-color="{{ pred.color }}">
-                                    Прогноз: {{ pred.value|floatformat:1 }}<br>
-                                    Δ {{ pred.delta|floatformat:1 }}
-                                </div>
-                            {% endif %}
-                        {% endwith %}
+                        {% if pred %}
+                            <div class="predicted" data-color="{{ pred.color }}">
+                                Прогноз: {{ pred.value|floatformat:1 }}<br>
+                                Δ {{ pred.delta|floatformat:1 }}
+                            </div>
+                        {% endif %}
                     </div>
+                    {% endwith %}
                 </div>
                 {% endwith %}
-
-                <div class="predicted-secondary" id="predicted-alt-{{ field.name }}"></div>
             {% endif %}
         {% endfor %}
 
@@ -160,10 +156,11 @@
             Object.entries(data).forEach(([key, val]) => {
                 const predDiv = document.getElementById(`predicted-${key}`);
                 const altDiv  = document.getElementById(`predicted-alt-${key}`);
-                if (!predDiv) return;
-                const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
-                const diff = val - inputVal;
-                predDiv.textContent = `Прогноз: ${val.toFixed(1)}`;
+                if (!predDiv || typeof val !== 'object') return;
+                const inputEl = document.getElementById(`input-${key}`);
+                const inputVal = inputEl && inputEl.value !== '' ? parseFloat(inputEl.value) : val.value;
+                const diff = val.value - inputVal;
+                predDiv.textContent = `Прогноз: ${val.value.toFixed(1)}`;
                 predDiv.dataset.color = colorHint(diff);
                 if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
             });
