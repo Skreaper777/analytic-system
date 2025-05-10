@@ -43,7 +43,12 @@
             <input id="date-input" type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
         {% endwith %}
     </div>
-    <form method="post">
+
+<form method="get" action="/train-models/?trained=1" style="margin-top: 20px;">
+    <button type="submit" style="background-color:#007bff;">Обучить модель</button>
+</form>
+
+<form method="post">
         {% csrf_token %}
         {% for field in form %}
             {% if field.name == "comment" %}
@@ -61,10 +66,6 @@
                 <div class="predicted-secondary" id="predicted-alt-{{ field.name }}"></div>
             {% endif %}
         {% endfor %}
-
-<form method="get" action="/train-models/?trained=1" style="margin-top: 20px;">
-    <button type="submit" style="background-color:#007bff;">Обучить модель</button>
-</form>
 
 <button type="submit">💾 Сохранить</button>
     </form>
