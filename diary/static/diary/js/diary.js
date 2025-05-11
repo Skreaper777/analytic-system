@@ -17,9 +17,32 @@ function colorHint(diff) {
     return "red";
 }
 
+
+function renderPrediction(key, predictedValue, inputValue) {
+    const predDiv = document.getElementById(`predicted-${key}`);
+    const altDiv = document.getElementById(`predicted-alt-${key}`);
+    if (!predDiv || !altDiv) return;
+    const diff = predictedValue - inputValue;
+    predDiv.textContent = `Прогноз: ${predictedValue.toFixed(1)}`;
+    predDiv.dataset.color = colorHint(diff);
+    altDiv.textContent = `Δ ${diff.toFixed(1)}`;
+}
+
 function updatePredictions(data) {
     Object.entries(data).forEach(([key, obj]) => {
-        const predDiv = document.getElementById(`predicted-${key}`);
+        const val = obj?.value;
+        const inputVal = parseFloat(document.getElementById(`input-${key}`)?.value || 0);
+        if (typeof val === "number" && !isNaN(val)) {
+            renderPrediction(key, val, inputVal);
+        } else {
+            const predDiv = document.getElementById(`predicted-${key}`);
+            const altDiv = document.getElementById(`predicted-alt-${key}`);
+            if (predDiv) predDiv.textContent = "Ошибка прогноза";
+            if (altDiv) altDiv.textContent = "";
+        }
+    });
+}
+`);
         const altDiv  = document.getElementById(`predicted-alt-${key}`);
         if (!predDiv) return;
 

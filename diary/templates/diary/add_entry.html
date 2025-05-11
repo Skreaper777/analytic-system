@@ -64,32 +64,16 @@
        {% endfor %}
       </div>
       <input id="input-{{ field.name }}" name="{{ field.name }}" type="hidden" value="{{ field.value|stringformat:'s'|default_if_none:'' }}"/>
-      {% with key=field.name %}
-       {% with pred=live_predictions|dict_get:key %}
-        <div class="prediction-wrapper">
-         <div class="prediction-block">
-          <div class="prediction-title">На лету</div>
-          {% if pred %}
-           <div class="predicted" data-color="{{ pred.color }}" id="predicted-{{ key }}">Прогноз: {{ pred.value|floatformat:1 }}</div>
-           <div class="predicted-secondary" id="predicted-alt-{{ key }}">Δ {{ pred.delta|floatformat:1 }}</div>
-          {% else %}
-           <div class="predicted" id="predicted-{{ key }}"></div>
-           <div class="predicted-secondary" id="predicted-alt-{{ key }}"></div>
-          {% endif %}
-         </div>
-       {% endwith %}
-       {% with pred=base_predictions|dict_get:key %}
-         <div class="prediction-block">
-          <div class="prediction-title">База</div>
-          {% if pred %}
-           <div class="predicted" data-color="{{ pred.color }}">Прогноз: {{ pred.value|floatformat:1 }}<br/>Δ {{ pred.delta|floatformat:1 }}</div>
-          {% endif %}
-         </div>
-       {% endwith %}
-        </div>
-      {% endwith %}
      {% endif %}
     {% endfor %}
+
+    {% for key in parameter_keys %}
+    <div class="prediction-block" data-param="{{ key }}">
+      <div class="predicted" id="predicted-{{ key }}" data-color="">Прогноз: –</div>
+      <div class="predicted-alt" id="predicted-alt-{{ key }}">Δ –</div>
+    </div>
+    {% endfor %}
+
     <button type="submit">💾 Сохранить</button>
    </form>
   </div>
