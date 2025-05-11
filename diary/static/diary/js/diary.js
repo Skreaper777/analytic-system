@@ -39,10 +39,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
 
-function updatePredictions(data) {
-    }
-
-
 
 function updatePredictions(data) {
     Object.entries(data).forEach(([key, val]) => {
