@@ -27,13 +27,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 
-        } else {
-            predDiv.textContent = "Ошибка прогноза";
-            predDiv.dataset.color = "red";
-            if (altDiv) {
-                altDiv.textContent = "";
-            }
-        }
+        }        }
     });
 }
 
@@ -43,6 +37,11 @@ document.addEventListener("DOMContentLoaded", function () {
             if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
         });
     }
+
+
+function updatePredictions(data) {
+    }
+
 
 
 function updatePredictions(data) {
@@ -105,16 +104,7 @@ function fetchPredictions() {
                     delete formValues[name];
                     buttons.forEach(b => b.classList.remove("selected"));
                     valueToSend = null;
-                } else {
-                    const val = btn.dataset.value;
-                    hiddenInput.value = val;
-                    formValues[name] = val;
-                    buttons.forEach(b => b.classList.remove("selected"));
-                    btn.classList.add("selected");
-                    valueToSend = parseFloat(val);
-                }
-
-                fetchPredictions();
+                }                fetchPredictions();
                 fetch(updateUrl, {
                     method: "POST",
                     headers: {
