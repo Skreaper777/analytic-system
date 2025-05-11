@@ -69,7 +69,7 @@
              data-url-predict="{% url 'diary:predict_today' %}"
              data-today="{{ today_str }}"></div>
 
-
+<script src="{% static 'diary/js/diary.js' %}"></script>
 
 <form method="get" action="/train-models/?trained=1" style="margin-top: 20px;">
     <button type="submit" style="background-color:#007bff;">Обучить модель</button>
@@ -127,6 +127,5 @@
 </div>
 
 
-<script src="{% static 'diary/diary.js' %}"></script>
 </body>
 </html>
