@@ -37,13 +37,19 @@ class EntryForm(forms.Form):
                 required=False,
                 min_value=0,
                 max_value=5,
+                widget=forms.HiddenInput()
             )
 
         # ------------------------------------------------------------------
         # Проставляем initial из EntryValue, чтобы кнопки подсветились
         # ------------------------------------------------------------------
         if self.instance and self.instance.pk:
+            import logging
+            logger = logging.getLogger(__name__)
+
             values_qs = EntryValue.objects.filter(entry=self.instance).select_related("parameter")
+            logger.debug("📋 Entry instance: %s", self.instance)
+            logger.debug("📊 Entry values: %s", [(ev.parameter.key, ev.value) for ev in values_qs])
             for ev in values_qs:
                 key = ev.parameter.key
                 if key in self.fields:
