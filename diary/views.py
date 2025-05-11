@@ -196,6 +196,9 @@ def update_value(request):
         param_key = data["parameter"]
         value = data.get("value")
         raw_date = data["date"]
+        logger.debug("📌 Получена дата из запроса: %s", raw_date)
+        if not raw_date:
+            logger.warning("⚠️ В запросе не передана дата.")
     except (KeyError, json.JSONDecodeError) as exc:
         logger.exception("update_value bad payload")
         return JsonResponse({"error": str(exc)}, status=400)
