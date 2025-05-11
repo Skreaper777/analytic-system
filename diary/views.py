@@ -148,8 +148,14 @@ def add_entry(request):
 
     # Подготовка данных для прогнозов
     df = get_diary_dataframe().copy()
+    logger.debug("📅 Получен запрос на отображение страницы за дату: %s", entry_date)
     values_qs = EntryValue.objects.filter(entry=entry).select_related("parameter")
+    logger.debug("📥 Загружаем значения EntryValue для этой даты...")
+    logger.debug("📦 Найдено параметров: %d", len(values_qs))
+    for ev in values_qs:
+        logger.debug("🔢 Параметр %s = %s", ev.parameter.key, ev.value)
     today_values = {ev.parameter.key: ev.value or 0 for ev in values_qs}
+    logger.debug("📤 Значения, переданные в шаблон: %s", today_values)
 
     live_raw = _predict_for_row(df, today_values, mode="live")
     base_raw = _predict_for_row(df, today_values, mode="base")
@@ -217,7 +223,7 @@ def update_value(request):
         ev, _ = EntryValue.objects.get_or_create(entry=entry, parameter=parameter)
         ev.value = value
         ev.save(update_fields=["value"])
-        logger.info("Saved %s=%s for %s", param_key, value, date_obj.isoformat())
+        logger.info("Параметр сохраняется в БД. %s=%s for %s", param_key, value, date_obj.isoformat())
 
     return JsonResponse({"status": "ok", "date": str(date_obj), "parameter": param_key, "value": value})
 
