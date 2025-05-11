@@ -69,7 +69,7 @@
    <div data-today="{{ today_str }}" data-url-predict="{% url 'diary:predict_today' %}" data-url-update="{% url 'diary:update_value' %}" id="diary">
    </div>
    <input id="predict-url" type="hidden" value="/predict/"/>
-   <input id="update-url" type="hidden" value="/update/"/>
+   <input id="update-url" type="hidden" value="/update-value/"/>
    <script src="{% static 'diary/js/diary.js' %}">
    </script>
    <form action="/train-models/?trained=1" method="get" style="margin-top: 20px;">

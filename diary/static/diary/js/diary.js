@@ -53,6 +53,21 @@ function fetchPredictions(formValues, predictUrl) {
     .catch(err => console.warn("Prediction error:", err));
 }
 
+function sendValueUpdate(updateUrl, name, valueToSend, dateValue) {
+    console.log("📤 Отправка update:", { parameter: name, value: valueToSend, date: dateValue });
+
+    fetch(updateUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie('csrftoken')
+        },
+        body: JSON.stringify({ key: name, value: valueToSend, date: dateValue })
+    }).then(resp => resp.json()).then(data => {
+        console.log("📥 Ответ update:", data);
+    }).catch(err => console.warn("Update error:", err));
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     const formValues = {};
     const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
@@ -99,16 +114,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 fetchPredictions(formValues, predictUrl);
 
                 const dateValue = document.getElementById("date-input")?.value || "";
-                console.log("📤 Отправка update:", { parameter: name, value: valueToSend, date: dateValue });
-
-                fetch(updateUrl, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRFToken": getCookie('csrftoken')
-                    },
-                    body: JSON.stringify({ parameter: name, value: valueToSend, date: dateValue })
-                });
+                sendValueUpdate(updateUrl, name, valueToSend, dateValue);
             });
         });
     });
