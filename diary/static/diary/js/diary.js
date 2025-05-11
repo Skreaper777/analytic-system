@@ -67,6 +67,16 @@ function fetchPredictions() {
 
 document.addEventListener("DOMContentLoaded", () => {
     fetchPredictions();
+
+    // 🟢 Подсветка кнопок по initial значениям
+    document.querySelectorAll("input[id^='input-']").forEach(input => {
+        const name = input.id.replace("input-", "");
+        const value = parseInt(input.value);
+        if (!isNaN(value)) {
+            const btn = document.querySelector(`.rating-buttons[data-name="${name}"] button[data-value="${value}"]`);
+            if (btn) btn.classList.add("selected");
+        }
+    });
 });
 
 document.addEventListener("click", function(e) {
