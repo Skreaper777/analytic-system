@@ -58,7 +58,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
     const predictUrl = document.getElementById("predict-url").value;
     const updateUrl  = document.getElementById("update-url").value;
-    const entryDate  = document.getElementById("date-input").value;
+    // Получим дату внутри события клика по кнопке
 
     allKeys.forEach(name => {
         const input = document.getElementById(`input-${name}`);
@@ -105,7 +105,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         "Content-Type": "application/json",
                         "X-CSRFToken": getCookie('csrftoken')
                     },
-                    body: JSON.stringify({ parameter: name, value: valueToSend, date: entryDate })
+                    body: JSON.stringify({ parameter: name, value: valueToSend, date: document.getElementById("date-input")?.value || "" })
                 });
             });
         });
