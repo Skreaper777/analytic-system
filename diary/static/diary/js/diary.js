@@ -25,23 +25,27 @@ document.addEventListener("DOMContentLoaded", function () {
         return "red";
     }
 
-    function updatePredictions(data) {
-        Object.entries(data).forEach(([key, val]) => {
-            const predDiv = document.getElementById(`predicted-${key}`);
-            const altDiv = document.getElementById(`predicted-alt-${key}`);
-            if (!predDiv) return;
-            const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
 
-if (typeof val === "number" && !isNaN(val)) {
-    const diff = val - inputVal;
-    predDiv.textContent = `Прогноз: ${val.toFixed(1)}`;
-    predDiv.dataset.color = colorHint(diff);
-    if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
-} else {
-    predDiv.textContent = "Ошибка прогноза";
-    predDiv.dataset.color = "red";
-    if (altDiv) altDiv.textContent = "";
+function updatePredictions(data) {
+    Object.entries(data).forEach(([key, val]) => {
+        const predDiv = document.getElementById(`predicted-${key}`);
+        const altDiv = document.getElementById(`predicted-alt-${key}`);
+        if (!predDiv) return;
+        const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
+
+        if (typeof val === "number" && !isNaN(val)) {
+            const diff = val - inputVal;
+            predDiv.textContent = `Прогноз: ${val.toFixed(1)}`;
+            predDiv.dataset.color = colorHint(diff);
+            if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
+        } else {
+            predDiv.textContent = "Ошибка прогноза";
+            predDiv.dataset.color = "red";
+            if (altDiv) altDiv.textContent = "";
+        }
+    });
 }
+
 
             predDiv.dataset.color = colorHint(diff);
             if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
