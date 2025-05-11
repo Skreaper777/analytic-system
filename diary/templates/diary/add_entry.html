@@ -43,8 +43,8 @@
     {% endwith %}
    </div>
    <div data-today="{{ today_str }}" data-url-predict="{% url 'diary:predict_today' %}" data-url-update="{% url 'diary:update_value' %}" id="diary"></div>
-   <input id="predict-url" type="hidden" value="/predict/"/>
-   <input id="update-url" type="hidden" value="/update-value/"/>
+   <input id="predict-url" type="hidden" value="{% url 'diary:predict_today' %}"/>
+   <input id="update-url" type="hidden" value="{% url 'diary:update_value' %}"/>
    <form action="/train-models/?trained=1" method="get" style="margin-top: 20px;">
     <button style="background-color:#007bff;" type="submit">Обучить модель</button>
    </form>

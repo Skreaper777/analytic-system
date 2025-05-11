@@ -22,7 +22,7 @@ function updatePredictions(data) {
         const predDiv = document.getElementById(`predicted-${key}`);
         const altDiv  = document.getElementById(`predicted-alt-${key}`);
         if (!predDiv) return;
-        const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
+        const inputVal = parseFloat(document.getElementById(`input-${key}`)?.value || 0);
 
         if (typeof val === "number" && !isNaN(val)) {
             const diff = val - inputVal;
@@ -38,14 +38,15 @@ function updatePredictions(data) {
 }
 
 function fetchPredictions() {
-    fetch("/predict/")
+    const url = document.getElementById("predict-url")?.value || "/predict/";
+    fetch(url)
         .then(response => response.json())
         .then(data => updatePredictions(data))
         .catch(error => console.error("Ошибка при получении прогнозов:", error));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    fetchPredictions();  // 🚀 начальная загрузка прогнозов
+    fetchPredictions();
 });
 
 document.addEventListener("click", function(e) {
@@ -60,19 +61,19 @@ document.addEventListener("click", function(e) {
         const valueToSend = btn.dataset.value;
         document.getElementById(`input-${name}`).value = valueToSend;
 
-        fetch("/update-value/", {
+        const date = document.getElementById("date-input")?.value || "";
+        const updateUrl = document.getElementById("update-url")?.value || "/update-value/";
+
+        fetch(updateUrl, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "X-CSRFToken": getCookie("csrftoken"),
             },
-            body: JSON.stringify({
-                parameter: name,
-                value: valueToSend,
-                date: document.getElementById("date-input")?.value || ""
-            })
-        }).then(data => {
-            fetchPredictions();  // 🔁 автообновление базового прогноза
-        });
+            body: JSON.stringify({ parameter: name, value: valueToSend, date })
+        })
+        .then(res => res.json())
+        .then(() => fetchPredictions())
+        .catch(err => console.error("Ошибка при обновлении значения:", err));
     }
 });
