@@ -164,7 +164,7 @@ def update_value(request):
             logger.warning(f"⚠️ Дата не передана, используется текущая: {raw_date}")
 
         date_obj = datetime.fromisoformat(raw_date.split("T")[0]).date()
-        param_key = data.get("parameter")  # ← исправлено здесь
+        param_key = data.get("parameter")
         value = data.get("value")
 
         entry, _ = Entry.objects.get_or_create(date=date_obj)
@@ -185,27 +185,6 @@ def update_value(request):
         return JsonResponse({"status": "error", "message": str(exc)}, status=400)
 
     return JsonResponse({'status': 'ok'})
-
-@csrf_exempt
-@require_POST
-def predict_today(request):
-    logger.debug("🚀 Вызов функции predict_today - старт обработки запроса")
-    try:
-        user_input = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    try:
-        df = get_diary_dataframe().copy()
-        if df.empty:
-            return JsonResponse({})
-        today_values = {**{k: 0.0 for k in df.columns if k != "date"}, **user_input}
-        live_raw = _predict_for_row(df, today_values, mode="live")
-        logger.debug(f"📤 Итоговые предсказания: {live_raw}")
-        return JsonResponse({k: {"value": v} for k, v in live_raw.items()})
-    except Exception as exc:
-        logger.exception("predict_today failed")
-        return JsonResponse({"error": str(exc)}, status=500)
 
 import subprocess
 

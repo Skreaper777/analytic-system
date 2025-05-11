@@ -6,7 +6,7 @@
 """
 from django.urls import path
 
-from . import views
+from . import views, api_views_predict
 
 app_name = "diary"
 
@@ -16,7 +16,6 @@ urlpatterns = [
     path("add/", views.add_entry, name="add_entry_alias"),
 
     # API-эндпоинты
-    path("predict/", views.predict_today, name="predict_today"),
     path("update-value/", views.update_value, name="update_value"),
 
     # Редирект после успешного сохранения
@@ -24,4 +23,8 @@ urlpatterns = [
 
     # Обучение моделей
     path("train-models/", views.train_models_view, name="train_models"),
+
+    # Обработка запросов для прогноза данных
+    path("predict/", api_views_predict.predict, name="predict"),
+
 ]

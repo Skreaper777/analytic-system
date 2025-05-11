@@ -17,10 +17,13 @@ function colorHint(diff) {
     return "red";
 }
 
-function updatePredictions(data) {
+function updatePredictions(data, mode = "live") {
     Object.entries(data).forEach(([key, obj]) => {
-        const predDiv = document.getElementById(`predicted-${key}`);
-        const altDiv  = document.getElementById(`predicted-alt-${key}`);
+        const predDivId = mode === "live" ? `predicted-${key}` : `predicted-base-${key}`;
+        const altDivId = mode === "live" ? `predicted-alt-${key}` : null;
+
+        const predDiv = document.getElementById(predDivId);
+        const altDiv  = altDivId ? document.getElementById(altDivId) : null;
         if (!predDiv) return;
 
         const val = obj?.value;
@@ -50,23 +53,23 @@ function buildTodayValuesForPost() {
     return result;
 }
 
-function fetchPredictions() {
-    const url = document.getElementById("predict-url")?.value || "/predict/";
-    fetch(url, {
+function fetchPredictionMode(mode = "live") {
+    return fetch("/predict/", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             "X-CSRFToken": getCookie("csrftoken"),
         },
-        body: JSON.stringify(buildTodayValuesForPost())
+        body: JSON.stringify({ mode, values: buildTodayValuesForPost() })
     })
     .then(response => response.json())
-    .then(data => updatePredictions(data))
-    .catch(error => console.error("Ошибка при получении прогнозов:", error));
+    .then(data => updatePredictions(data, mode))
+    .catch(error => console.error(`Ошибка при получении ${mode} прогноза:`, error));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    fetchPredictions();
+    fetchPredictionMode("live");
+    fetchPredictionMode("base");
 
     // 🟢 Подсветка кнопок по initial значениям
     document.querySelectorAll("input[id^='input-']").forEach(input => {
@@ -103,7 +106,10 @@ document.addEventListener("click", function(e) {
             body: JSON.stringify({ parameter: name, value: valueToSend, date })
         })
         .then(res => res.json())
-        .then(() => fetchPredictions())
+        .then(() => {
+            fetchPredictionMode("live");
+            fetchPredictionMode("base");
+        })
         .catch(err => console.error("Ошибка при обновлении значения:", err));
     }
 });
