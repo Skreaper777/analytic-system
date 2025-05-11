@@ -161,7 +161,7 @@ def update_value(request):
             logger.warning(f"⚠️ Дата не передана, используется текущая: {raw_date}")
 
         date_obj = datetime.fromisoformat(raw_date.split("T")[0]).date()
-        param_key = data.get("key")
+        param_key = data.get("parameter")  # ← исправлено здесь
         value = data.get("value")
 
         entry, _ = Entry.objects.get_or_create(date=date_obj)
