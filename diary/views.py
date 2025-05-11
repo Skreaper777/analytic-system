@@ -1,12 +1,3 @@
-# diary/views.py
-"""Вьюхи дневника
-Исправлено:
-• Корректное сохранение значений для любых дат – timestamp из JS теперь
-  интерпретируется в *локальном* часовом поясе, без сдвигов;
-• Исправлены лишние переводы строк в конце файла (SyntaxError);
-• Весь остальной функционал **полностью сохранён**.
-"""
-
 from __future__ import annotations
 
 import json
@@ -32,12 +23,7 @@ from .ml_utils.utils import get_diary_dataframe
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _color_hint(diff: float) -> str:
-    """Определяет цвет подсказки по модулю дельты."""
     diff_abs = abs(diff)
     if diff_abs < 1:
         return "green"
@@ -45,19 +31,16 @@ def _color_hint(diff: float) -> str:
         return "yellow"
     return "red"
 
-
 def _predict_for_row(
     df: pd.DataFrame,
     today_values: Dict[str, float],
     mode: str = "live",
 ) -> Dict[str, float]:
-    """Возвращает прогнозы для строки ``today_values`` в двух режимах."""
     predictions: Dict[str, float] = {}
     model_dir = os.path.join(settings.BASE_DIR, "diary", "trained_models", "base")
 
     for target in today_values.keys():
         try:
-            # 1. Модель и признаки
             if mode == "live":
                 model_info = base_model.train_model(df.copy(), target=target, exclude=[target])
                 model = model_info.get("model")
@@ -70,32 +53,26 @@ def _predict_for_row(
                 model = joblib.load(model_path)
                 features = getattr(model, "feature_names_in_", [])
 
-            # 2. features → list
             if isinstance(features, (pd.Index, np.ndarray)):
                 features = features.tolist()
             if not features:
                 features = [c for c in df.columns if c not in ("date", target)]
 
-            # 3. Строка для предсказания
             safe_today = {
                 f: float(today_values.get(f)) if today_values.get(f) not in [None, "", "None"] else 0.0
                 for f in features
             }
             X_today = pd.DataFrame([safe_today])
-
-            # 4. Предсказание
             pred_val = float(model.predict(X_today)[0])
             predictions[target] = round(pred_val, 2)
         except Exception:
             logger.exception("Prediction failed for %s (%s mode)", target, mode)
     return predictions
 
-
 def _build_pred_dict(
     raw_preds: Dict[str, float],
     today_values: Dict[str, float],
 ) -> Dict[str, Dict[str, Any]]:
-    """Готовит структуру для шаблона add_entry.html."""
     out: Dict[str, Dict[str, Any]] = {}
     for key, val in raw_preds.items():
         diff = val - today_values.get(key, 0.0)
@@ -106,12 +83,8 @@ def _build_pred_dict(
         }
     return out
 
-# ---------------------------------------------------------------------------
-# Страницы
-# ---------------------------------------------------------------------------
-
 def add_entry(request):
-    logger.debug("🚀 Вызов функции add_entry - старт обработки запроса")
+    logger.debug("\U0001f680 Вызов функции add_entry - старт обработки запроса")
     date_str = request.GET.get("date")
     try:
         entry_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
@@ -146,7 +119,6 @@ def add_entry(request):
                 logger.error("❌ Parameter with key '%s' not found", key)
         return HttpResponseRedirect(reverse("diary:add_entry"))
 
-    # Подготовка данных для прогнозов
     df = get_diary_dataframe().copy()
     logger.debug("📅 Получен запрос на отображение страницы за дату: %s", entry_date)
     values_qs = EntryValue.objects.filter(entry=entry).select_related("parameter")
@@ -172,19 +144,13 @@ def add_entry(request):
     }
     return render(request, "diary/add_entry.html", context)
 
-
 def entry_success(request):
     return HttpResponseRedirect(reverse("diary:add_entry"))
-
-# ---------------------------------------------------------------------------
-# AJAX endpoints
-# ---------------------------------------------------------------------------
 
 @csrf_exempt
 @require_POST
 def update_value(request):
-
-    logger.debug("🚀 Вызов функции update_value — старт обработки запроса")
+    logger.debug("\U0001f680 Вызов функции update_value — старт обработки запроса")
     try:
         data = json.loads(request.body)
         if "date" in data:
@@ -203,7 +169,7 @@ def update_value(request):
 
         if value is None:
             EntryValue.objects.filter(entry=entry, parameter=parameter).delete()
-            logger.debug("🗑 Удалено значение параметра %s за %s", param_key, date_obj)
+            logger.debug("🖑 Удалено значение параметра %s за %s", param_key, date_obj)
         else:
             ev, _ = EntryValue.objects.update_or_create(
                 entry=entry,
@@ -232,14 +198,11 @@ def predict_today(request):
             return JsonResponse({})
         today_values = {**{k: 0.0 for k in df.columns if k != "date"}, **user_input}
         live_raw = _predict_for_row(df, today_values, mode="live")
+        logger.debug(f"📤 Итоговые предсказания: {live_raw}")
         return JsonResponse({k: {"value": v} for k, v in live_raw.items()})
     except Exception as exc:
         logger.exception("predict_today failed")
         return JsonResponse({"error": str(exc)}, status=500)
-
-# ---------------------------------------------------------------------------
-# Запуск обучения моделей
-# ---------------------------------------------------------------------------
 
 import subprocess
 
