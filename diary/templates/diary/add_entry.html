@@ -60,7 +60,7 @@
     <h2>📘 Дневник состояния</h2>
     <div class="date-selector">
         {% with request.GET.date|default:today_str as current_date %}
-            <input id="date-input" type="date" value="{{ current_date }}" onchange="window.location.href='?date='+this.value">
+            <input id="date-input" type="date" value="{{ current_date }}" onchange="window.location.href='?date='+encodeURIComponent(this.value)">
         {% endwith %}
     </div>
 
