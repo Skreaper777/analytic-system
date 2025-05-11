@@ -126,7 +126,10 @@ def add_entry(request):
     logger.debug("📦 Найдено параметров: %d", len(values_qs))
     for ev in values_qs:
         logger.debug("🔢 Параметр %s = %s", ev.parameter.key, ev.value)
-    today_values = {ev.parameter.key: ev.value or 0 for ev in values_qs}
+    all_keys = [p.key for p in Parameter.objects.filter(active=True)]
+    today_values = {k: 0.0 for k in all_keys}
+    today_values.update({ev.parameter.key: ev.value or 0 for ev in values_qs})
+
     logger.debug("📤 Значения, переданные в шаблон: %s", today_values)
 
     live_raw = _predict_for_row(df, today_values, mode="live")
