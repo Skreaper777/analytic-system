@@ -16,15 +16,12 @@ function colorHint(diff) {
 }
 
 function updatePredictions(data) {
-    Object.entries(data).forEach(([key, valObj]) => {
+    Object.entries(data).forEach(([key, val]) => {
         const predDiv = document.getElementById(`predicted-${key}`);
         const altDiv  = document.getElementById(`predicted-alt-${key}`);
         if (!predDiv) return;
+        const inputVal = parseFloat(document.getElementById(`input-${key}`).value) || 0;
 
-        const inputEl = document.getElementById(`input-${key}`);
-        const inputVal = inputEl ? parseFloat(inputEl.value) || 0 : 0;
-
-        const val = valObj?.value;
         if (typeof val === "number" && !isNaN(val)) {
             const diff = val - inputVal;
             predDiv.textContent = `Прогноз: ${val.toFixed(1)}`;
@@ -53,22 +50,7 @@ function fetchPredictions(formValues, predictUrl) {
     })
     .then(resp => resp.json())
     .then(updatePredictions)
-    .catch(err => {
-        console.warn("Prediction error:", err);
-        // Показываем ошибку для всех параметров, чтобы пользователь понял причину
-        const keys = Object.keys(formValues);
-        keys.forEach(key => {
-            const predDiv = document.getElementById(`predicted-${key}`);
-            const altDiv = document.getElementById(`predicted-alt-${key}`);
-            if (predDiv) {
-                predDiv.textContent = "Ошибка прогноза";
-                predDiv.dataset.color = "red";
-            }
-            if (altDiv) {
-                altDiv.textContent = "";
-            }
-        });
-    });
+    .catch(err => console.warn("Prediction error:", err));
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -116,13 +98,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 fetchPredictions(formValues, predictUrl);
 
+                const dateValue = document.getElementById("date-input")?.value || "";
+                console.log("📤 Отправка update:", { parameter: name, value: valueToSend, date: dateValue });
+
                 fetch(updateUrl, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         "X-CSRFToken": getCookie('csrftoken')
                     },
-                    body: JSON.stringify({ parameter: name, value: valueToSend, date: document.getElementById("date-input")?.value || "" })
+                    body: JSON.stringify({ parameter: name, value: valueToSend, date: dateValue })
                 });
             });
         });
