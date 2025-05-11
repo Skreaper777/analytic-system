@@ -1,3 +1,5 @@
+// diary.js
+
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -26,98 +28,51 @@ function updatePredictions(data) {
             const diff = val - inputVal;
             predDiv.textContent = `Прогноз: ${val.toFixed(1)}`;
             predDiv.dataset.color = colorHint(diff);
-            if (altDiv) {
-                altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
-            }
+            if (altDiv) altDiv.textContent = `Δ ${diff.toFixed(1)}`;
         } else {
             predDiv.textContent = "Ошибка прогноза";
-            predDiv.dataset.color = "red";
-            if (altDiv) {
-                altDiv.textContent = "";
-            }
+            predDiv.dataset.color = "";
+            if (altDiv) altDiv.textContent = "";
         }
     });
 }
 
-function fetchPredictions(formValues, predictUrl) {
-    fetch(predictUrl, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCookie('csrftoken')
-        },
-        body: JSON.stringify(formValues)
-    })
-    .then(resp => resp.json())
-    .then(updatePredictions)
-    .catch(err => console.warn("Prediction error:", err));
+function fetchPredictions() {
+    fetch("/predict/")
+        .then(response => response.json())
+        .then(data => updatePredictions(data))
+        .catch(error => console.error("Ошибка при получении прогнозов:", error));
 }
 
-function sendValueUpdate(updateUrl, name, valueToSend, dateValue) {
-    console.log("📤 Отправка update:", { parameter: name, value: valueToSend, date: dateValue });
+document.addEventListener("DOMContentLoaded", () => {
+    fetchPredictions();  // 🚀 начальная загрузка прогнозов
+});
 
-    fetch(updateUrl, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCookie('csrftoken')
-        },
-        body: JSON.stringify({ key: name, value: valueToSend, date: dateValue })
-    }).then(resp => resp.json()).then(data => {
-        console.log("📥 Ответ update:", data);
-    }).catch(err => console.warn("Update error:", err));
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-    const formValues = {};
-    const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
-    const predictUrl = document.getElementById("predict-url").value;
-    const updateUrl  = document.getElementById("update-url").value;
-
-    allKeys.forEach(name => {
-        const input = document.getElementById(`input-${name}`);
-        if (input && input.value !== "") {
-            formValues[name] = input.value;
-        }
-    });
-
-    document.querySelectorAll('.rating-buttons').forEach(group => {
+document.addEventListener("click", function(e) {
+    if (e.target.matches(".rating-buttons button")) {
+        const btn = e.target;
+        const group = btn.closest(".rating-buttons");
         const name = group.dataset.name;
-        const hiddenInput = document.getElementById(`input-${name}`);
-        const buttons = group.querySelectorAll('button');
 
-        buttons.forEach(btn => {
-            if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
-                btn.classList.add('selected');
-            }
+        group.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+
+        const valueToSend = btn.dataset.value;
+        document.getElementById(`input-${name}`).value = valueToSend;
+
+        fetch("/update-value/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+            },
+            body: JSON.stringify({
+                parameter: name,
+                value: valueToSend,
+                date: document.getElementById("date-input")?.value || ""
+            })
+        }).then(data => {
+            fetchPredictions();  // 🔁 автообновление базового прогноза
         });
-
-        buttons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const isActive = btn.classList.contains('selected');
-                let valueToSend;
-
-                if (isActive) {
-                    hiddenInput.value = '';
-                    delete formValues[name];
-                    buttons.forEach(b => b.classList.remove('selected'));
-                    valueToSend = null;
-                } else {
-                    const val = btn.dataset.value;
-                    hiddenInput.value = val;
-                    formValues[name] = val;
-                    buttons.forEach(b => b.classList.remove('selected'));
-                    btn.classList.add('selected');
-                    valueToSend = parseFloat(val);
-                }
-
-                fetchPredictions(formValues, predictUrl);
-
-                const dateValue = document.getElementById("date-input")?.value || "";
-                sendValueUpdate(updateUrl, name, valueToSend, dateValue);
-            });
-        });
-    });
-
-    fetchPredictions(formValues, predictUrl);
+    }
 });
