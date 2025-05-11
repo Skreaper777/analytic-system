@@ -1,44 +1,19 @@
-
-document.addEventListener("DOMContentLoaded", function () {
-    const diary = document.getElementById("diary");
-    const predictUrl = diary.dataset.urlPredict;
-    const updateUrl = diary.dataset.urlUpdate;
-    const entryDate = diary.dataset.today;
-    const paramKeys = JSON.parse(document.getElementById("param-keys").textContent);
-
-    const formValues = {};
-
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== "") {
-            document.cookie.split(";").forEach(cookie => {
-                const [key, value] = cookie.trim().split("=");
-                if (key === name) cookieValue = decodeURIComponent(value);
-            });
-        }
-        return cookieValue;
-    }
-
-    function colorHint(diff) {
-        if (Math.abs(diff) < 1) return "green";
-        if (Math.abs(diff) <= 2) return "yellow";
-        return "red";
-    }
-
-
-
-        }        }
-    });
-}
-
-
-
-            predDiv.dataset.color = colorHint(diff);
-            if (altDiv) altDiv.textContent = `Δ ${diff > 0 ? "+" : ""}${diff.toFixed(1)}`;
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        document.cookie.split(';').forEach(cookie => {
+            const [key, value] = cookie.trim().split('=');
+            if (key === name) cookieValue = decodeURIComponent(value);
         });
     }
+    return cookieValue;
+}
 
-
+function colorHint(diff) {
+    if (Math.abs(diff) < 1) return "green";
+    if (Math.abs(diff) <= 2) return "yellow";
+    return "red";
+}
 
 function updatePredictions(data) {
     Object.entries(data).forEach(([key, val]) => {
@@ -64,58 +39,77 @@ function updatePredictions(data) {
     });
 }
 
+function fetchPredictions(formValues, predictUrl) {
+    fetch(predictUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie('csrftoken')
+        },
+        body: JSON.stringify(formValues)
+    })
+    .then(resp => resp.json())
+    .then(updatePredictions)
+    .catch(err => console.warn("Prediction error:", err));
+}
 
-function fetchPredictions() {
-        fetch(predictUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify(formValues)
-        })
-        .then(resp => resp.json())
-        .then(updatePredictions)
-        .catch(err => console.warn("Prediction error:", err));
-    }
+document.addEventListener("DOMContentLoaded", function () {
+    const formValues = {};
+    const allKeys = JSON.parse(document.getElementById("param-keys").textContent);
+    const predictUrl = document.getElementById("predict-url").value;
+    const updateUrl  = document.getElementById("update-url").value;
+    const entryDate  = document.getElementById("date-input").value;
 
-    document.querySelectorAll(".rating-buttons").forEach(group => {
+    allKeys.forEach(name => {
+        const input = document.getElementById(`input-${name}`);
+        if (input && input.value !== "") {
+            formValues[name] = input.value;
+        }
+    });
+
+    document.querySelectorAll('.rating-buttons').forEach(group => {
         const name = group.dataset.name;
         const hiddenInput = document.getElementById(`input-${name}`);
-        const buttons = group.querySelectorAll("button");
+        const buttons = group.querySelectorAll('button');
 
         buttons.forEach(btn => {
             if (hiddenInput.value && parseFloat(btn.dataset.value) === parseFloat(hiddenInput.value)) {
-                btn.classList.add("selected");
+                btn.classList.add('selected');
             }
         });
 
         buttons.forEach(btn => {
-            btn.addEventListener("click", () => {
-                const isActive = btn.classList.contains("selected");
+            btn.addEventListener('click', () => {
+                const isActive = btn.classList.contains('selected');
                 let valueToSend;
 
                 if (isActive) {
-                    hiddenInput.value = "";
+                    hiddenInput.value = '';
                     delete formValues[name];
-                    buttons.forEach(b => b.classList.remove("selected"));
+                    buttons.forEach(b => b.classList.remove('selected'));
                     valueToSend = null;
-                }                fetchPredictions();
+                } else {
+                    const val = btn.dataset.value;
+                    hiddenInput.value = val;
+                    formValues[name] = val;
+                    buttons.forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    valueToSend = parseFloat(val);
+                }
+
+                fetchPredictions(formValues, predictUrl);
+
                 fetch(updateUrl, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        "X-CSRFToken": getCookie("csrftoken")
+                        "X-CSRFToken": getCookie('csrftoken')
                     },
-                    body: JSON.stringify({
-                        key: name,
-                        value: valueToSend,
-                        date: entryDate
-                    })
+                    body: JSON.stringify({ parameter: name, value: valueToSend, date: entryDate })
                 });
             });
         });
     });
 
-    fetchPredictions();
+    fetchPredictions(formValues, predictUrl);
 });
