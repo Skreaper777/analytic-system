@@ -111,6 +111,7 @@ def _build_pred_dict(
 # ---------------------------------------------------------------------------
 
 def add_entry(request):
+    logger.debug("🚀 Вызов функции add_entry — старт обработки запроса")
     date_str = request.GET.get("date")
     try:
         entry_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
@@ -224,6 +225,7 @@ def update_value(request):
 @csrf_exempt
 @require_POST
 def predict_today(request):
+    logger.debug("🚀 Вызов функции predict_today — старт обработки запроса")
     try:
         user_input = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
