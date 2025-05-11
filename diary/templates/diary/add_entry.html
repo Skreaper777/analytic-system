@@ -217,7 +217,8 @@
                             "Content-Type": "application/json",
                             "X-CSRFToken": getCookie('csrftoken')
                         },
-                        body: JSON.stringify({ parameter: name, value: valueToSend, date: entryDate })
+                        body: JSON.stringify({ parameter: name, value: valueToSend, date: entryDate ,
+            date: document.getElementById("date").value)
                     });
                 });
             });

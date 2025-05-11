@@ -111,13 +111,13 @@ def _build_pred_dict(
 # ---------------------------------------------------------------------------
 
 def add_entry(request):
-    logger.debug("🚀 Вызов функции add_entry — старт обработки запроса")
+    logger.debug("🚀 Вызов функции add_entry - старт обработки запроса")
     date_str = request.GET.get("date")
     try:
         entry_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
     except ValueError:
         entry_date = date.today()
-        logger.debug("Invalid date '%s' — fallback to today", date_str)
+        logger.debug("Invalid date '%s' - fallback to today", date_str)
 
     entry, _ = Entry.objects.get_or_create(date=entry_date)
     form = EntryForm(request.POST or None, instance=entry)
@@ -183,58 +183,44 @@ def entry_success(request):
 @csrf_exempt
 @require_POST
 def update_value(request):
-    # Логгер в my_test.log (однократно)
-    file_handler = logging.FileHandler("my_test.log", encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter("%(asctime)s — %(levelname)s — %(message)s"))
-    if not any(isinstance(h, logging.FileHandler) and h.baseFilename.endswith("my_test.log") for h in logger.handlers):
-        logger.addHandler(file_handler)
 
-    """Сохраняет/обновляет/удаляет одно значение параметра."""
+    logger.debug("🚀 Вызов функции update_value — старт обработки запроса")
     try:
-        data = json.loads(request.body.decode("utf-8"))
-        param_key = data["parameter"]
+        data = json.loads(request.body)
+        if "date" in data:
+            raw_date = data["date"]
+            logger.debug(f"📅 Получена дата из POST-запроса: {raw_date}")
+        else:
+            raw_date = datetime.now().isoformat()
+            logger.warning(f"⚠️ Дата не передана, используется текущая: {raw_date}")
+
+        date_obj = datetime.fromisoformat(raw_date.split("T")[0]).date()
+        param_key = data.get("key")
         value = data.get("value")
-        raw_date = data["date"]
-        logger.debug("📌 Получена дата из запроса: %s", raw_date)
-        if not raw_date:
-            logger.warning("⚠️ В запросе не передана дата.")
+
+        entry, _ = Entry.objects.get_or_create(date=date_obj)
+        parameter = Parameter.objects.get(key=param_key)
+
+        if value is None:
+            EntryValue.objects.filter(entry=entry, parameter=parameter).delete()
+            logger.debug("🗑 Удалено значение параметра %s за %s", param_key, date_obj)
+        else:
+            ev, _ = EntryValue.objects.update_or_create(
+                entry=entry,
+                parameter=parameter,
+                defaults={"value": value}
+            )
+            logger.info("Параметр сохраняется в БД. %s=%s for %s", param_key, value, date_obj)
     except (KeyError, json.JSONDecodeError) as exc:
-        logger.exception("update_value bad payload")
-        return JsonResponse({"error": str(exc)}, status=400)
+        logger.error("❌ Ошибка в запросе update_value: %s", exc)
+        return JsonResponse({"status": "error", "message": str(exc)}, status=400)
 
-    # --- Приведение даты ----------------------------------------------------
-    if isinstance(raw_date, str):
-        try:
-            date_obj = datetime.fromisoformat(raw_date.split("T")[0]).date()
-        except ValueError as exc:
-            logger.exception("update_value bad date")
-            return JsonResponse({"error": str(exc)}, status=400)
-    else:
-        return JsonResponse({"error": "Unsupported date format"}, status=400)
-
-    # --- Работа с БД --------------------------------------------------------
-    entry, _ = Entry.objects.get_or_create(date=date_obj)
-    parameter = Parameter.objects.filter(key=param_key).first()
-    if not parameter:
-        return JsonResponse({"error": "Unknown parameter"}, status=400)
-
-    if value in (None, ""):
-        EntryValue.objects.filter(entry=entry, parameter=parameter).delete()
-        logger.info("Deleted %s for %s", param_key, date_obj.isoformat())
-    else:
-        ev, _ = EntryValue.objects.get_or_create(entry=entry, parameter=parameter)
-        ev.value = value
-        ev.save(update_fields=["value"])
-        logger.info("Параметр сохраняется в БД. %s=%s for %s", param_key, value, date_obj.isoformat())
-
-    return JsonResponse({"status": "ok", "date": str(date_obj), "parameter": param_key, "value": value})
-
+    return JsonResponse({'status': 'ok'})
 
 @csrf_exempt
 @require_POST
 def predict_today(request):
-    logger.debug("🚀 Вызов функции predict_today — старт обработки запроса")
+    logger.debug("🚀 Вызов функции predict_today - старт обработки запроса")
     try:
         user_input = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
